@@ -9,7 +9,7 @@
 <link rel="manifest" href="manifest.json">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Crane Inspection">
-<title>Weekly Tower Crane Inspection — 1.1.1</title>
+<title>Tower Crane Inspection — Executive Package 1.2</title>
 <style>
   :root{
     --paper:#F3F0E8;
@@ -163,6 +163,22 @@
   .save-status{font-size:11.5px;color:var(--muted);text-align:center;margin:6px 0 0;min-height:14px;}
   .footnote{text-align:center;font-size:11px;color:var(--muted);margin-top:16px;line-height:1.5;padding:0 10px;}
 
+  select{font:inherit;font-size:14.5px;color:var(--ink);border:1.5px solid var(--line);border-radius:8px;padding:9px 10px;background:#fffefb;font-weight:500;width:100%;}
+  .management-status{margin-top:12px;border-radius:10px;padding:11px 12px;font-size:12.5px;font-weight:700;border:1px solid var(--line);}
+  .management-status.good{color:var(--safe);background:rgba(31,122,70,.08);border-color:rgba(31,122,70,.25);}
+  .management-status.warn{color:var(--amber-dark);background:rgba(204,122,30,.10);border-color:rgba(204,122,30,.25);}
+  .management-status.bad{color:var(--hazard);background:rgba(178,51,39,.08);border-color:rgba(178,51,39,.25);}
+  .exec-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px;}
+  .exec-panel{border:1px solid var(--line);border-radius:10px;padding:11px;background:#fffefb;}
+  .exec-panel h3{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--steel);margin-bottom:7px;}
+  .exec-panel p{font-size:12.5px;line-height:1.45;margin:4px 0;}
+  .trend-row{display:grid;grid-template-columns:95px 1fr 55px;gap:8px;align-items:center;margin:7px 0;font-size:11.5px;}
+  .trend-bar{height:9px;background:#ebe6d9;border-radius:99px;overflow:hidden;}
+  .trend-fill{height:100%;background:var(--safe);border-radius:99px;}
+  .action-row{padding:9px 0;border-bottom:1px solid var(--line);font-size:12px;line-height:1.4;}
+  .action-row:last-child{border-bottom:none;}
+  @media(max-width:520px){.exec-grid{grid-template-columns:1fr;}.report-controls .tag-btn{flex:1 1 45%;}}
+
   /* ---------- Confirm overlay ---------- */
   .confirm-overlay{position:fixed;inset:0;background:rgba(20,22,26,.55);
     display:flex;align-items:center;justify-content:center;z-index:60;padding:24px;}
@@ -201,7 +217,7 @@
            placeholder="Crane owner / company name" autocomplete="off">
     <p class="nameplate-sub" id="nameplateSub"></p>
   </header>
-  <div style="text-align:right;font-size:.72rem;color:var(--muted);margin:-6px 2px 8px;">App version 1.1.1</div>
+  <div style="text-align:right;font-size:.72rem;color:var(--muted);margin:-6px 2px 8px;">App version 1.2 Executive Package</div>
 
   <div class="card">
     <h2 class="card-title">Site &amp; Crane Info</h2>
@@ -263,6 +279,26 @@
     <textarea id="remarks" rows="4" placeholder="Note any faults, follow-ups, or site conditions..."></textarea>
   </div>
 
+  <div class="card" id="managementReviewCard">
+    <h2 class="card-title">Management Review <span class="date-tag" id="managementDateTag"></span></h2>
+    <div class="field-grid">
+      <label>Follow-up Status
+        <select id="followUpStatus">
+          <option value="N/A">N/A — no issue</option>
+          <option value="Open">Open</option>
+          <option value="In Progress">In Progress</option>
+          <option value="Resolved">Resolved</option>
+        </select>
+      </label>
+      <label>Action Owner
+        <input id="actionOwner" type="text" autocomplete="off" placeholder="Supervisor / PM">
+      </label>
+      <label class="full">Management Notes
+        <textarea id="managementNotes" rows="3" placeholder="Corrective action, follow-up, or management disposition..."></textarea>
+      </label>
+    </div>
+  </div>
+
   <div class="card">
     <h2 class="card-title">Operator Sign-Off <span class="date-tag" id="signDateTag"></span></h2>
     <div class="sig-wrap">
@@ -275,6 +311,22 @@
     </div>
   </div>
 
+
+  <div class="card" id="managementCard">
+    <h2 class="card-title">Management Dashboard</h2>
+    <div class="report-controls">
+      <button type="button" id="mgmt30Btn" class="tag-btn amber">30 Days</button>
+      <button type="button" id="mgmt90Btn" class="tag-btn ghost">90 Days</button>
+      <button type="button" id="mgmtYtdBtn" class="tag-btn ghost">YTD</button>
+      <button type="button" id="mgmtAllBtn" class="tag-btn ghost">All History</button>
+      <button type="button" id="execReportBtn" class="tag-btn ghost">Executive Report</button>
+    </div>
+    <div id="managementSummary" class="report-summary"></div>
+    <div id="managementStatus" class="management-status"></div>
+    <div id="managementTrend" class="report-preview"></div>
+    <div id="managementActions" class="report-preview"></div>
+    <p class="footnote">Management metrics are calculated from inspections saved on this device. The executive report is designed for print or Save as PDF.</p>
+  </div>
 
   <div class="card" id="reportsCard">
     <h2 class="card-title">Reports &amp; Master Overview</h2>
@@ -531,6 +583,10 @@
     document.getElementById("remarks").value = d.remarks || "";
     document.getElementById("dailyInitials").value = d.initials || "";
     document.getElementById("operatorName").value = d.operatorName || "";
+    document.getElementById("followUpStatus").value = d.followUpStatus || ((Object.keys(d.checks||{}).some(function(i){return d.checks[i]==='fault';})) ? "Open" : "N/A");
+    document.getElementById("actionOwner").value = d.actionOwner || "";
+    document.getElementById("managementNotes").value = d.managementNotes || "";
+    document.getElementById("managementDateTag").textContent = "— " + shortLabel(selectedDate);
   }
 
   /* ---------- selecting a date ---------- */
@@ -652,6 +708,7 @@
     setSaveStatus("Saving…");
     saveTimer = setTimeout(function(){
       storageSet(STORAGE_NS + ":draft", JSON.stringify(draft)).then(function(ok){
+        if(typeof renderManagement === "function") renderManagement("30");
         var stamp = new Date().toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"});
         setSaveStatus(ok ? ("Saved " + stamp) : "Save failed — will retry on next change");
       });
@@ -749,8 +806,84 @@
       draft.lastOperatorName = e.target.value;
       queueSave();
     });
+    document.getElementById("followUpStatus").addEventListener("change", function(e){ draft.days[selectedDate].followUpStatus=e.target.value; queueSave(); });
+    document.getElementById("actionOwner").addEventListener("input", function(e){ draft.days[selectedDate].actionOwner=e.target.value; queueSave(); });
+    document.getElementById("managementNotes").addEventListener("input", function(e){ draft.days[selectedDate].managementNotes=e.target.value; queueSave(); });
   }
 
+
+  /* ---------- management / executive dashboard ---------- */
+  function managementRange(mode){
+    var end=todayKey();
+    if(mode==='30') return [addDays(end,-29),end];
+    if(mode==='90') return [addDays(end,-89),end];
+    if(mode==='YTD'){ var d=new Date(); return [toKey(new Date(d.getFullYear(),0,1)),end]; }
+    var keys=Object.keys(draft.days).sort(); return [keys.length?keys[0]:end,end];
+  }
+  function managementSummary(keys){
+    var s=summarize(keys), total=keys.length, checked=s.ok+s.fault, completion=total?Math.round(s.completed/total*100):0;
+    var passRate=checked?Math.round(s.ok/checked*100):0;
+    var faultDays=0, open=0, inprog=0, resolved=0, actions=[];
+    keys.forEach(function(k){
+      var d=draft.days[k]; if(!d) return;
+      var hasFault=Object.keys(d.checks||{}).some(function(i){return d.checks[i]==='fault';});
+      if(hasFault) faultDays++;
+      var st=d.followUpStatus || (hasFault?'Open':'N/A');
+      if(st==='Open') open++; else if(st==='In Progress') inprog++; else if(st==='Resolved') resolved++;
+      if(hasFault || (d.remarks||'').trim() || (d.managementNotes||'').trim()) actions.push({date:k,status:st,owner:d.actionOwner||'Unassigned',remarks:d.managementNotes||d.remarks||'Fault/remark recorded'});
+    });
+    return Object.assign(s,{completion:completion,passRate:passRate,faultDays:faultDays,open:open,inprog:inprog,resolved:resolved,actions:actions});
+  }
+  function managementStatsHtml(s){
+    return '<div class="report-stat"><b>'+s.completion+'%</b><span>Inspection completion</span></div>'
+      +'<div class="report-stat"><b>'+s.passRate+'%</b><span>Check pass rate</span></div>'
+      +'<div class="report-stat"><b>'+s.fault+'</b><span>Faults recorded</span></div>'
+      +'<div class="report-stat"><b>'+s.open+'</b><span>Open follow-ups</span></div>'
+      +'<div class="report-stat"><b>'+s.inprog+'</b><span>In progress</span></div>'
+      +'<div class="report-stat"><b>'+s.resolved+'</b><span>Resolved</span></div>'
+      +'<div class="report-stat"><b>'+s.remarks+'</b><span>Remark days</span></div>'
+      +'<div class="report-stat"><b>'+s.signed+'</b><span>Operator entries</span></div>';
+  }
+  function managementTrendHtml(keys){
+    var byMonth={};
+    keys.forEach(function(k){var m=k.slice(0,7); if(!byMonth[m]) byMonth[m]={total:0,complete:0,fault:0}; byMonth[m].total++; var d=draft.days[k]; if(d){var c=Object.keys(d.checks||{}); if(c.length===ITEMS.length) byMonth[m].complete++; if(c.some(function(i){return d.checks[i]==='fault';})) byMonth[m].fault++;}});
+    var months=Object.keys(byMonth).sort().slice(-6); if(!months.length) return '<p>No inspection history yet.</p>';
+    var max=Math.max.apply(null,months.map(function(m){return byMonth[m].total;}));
+    return '<strong>Inspection trend</strong>'+months.map(function(m){var x=byMonth[m], pct=max?Math.round(x.total/max*100):0; return '<div class="trend-row"><span>'+escapeHtml(m)+'</span><div class="trend-bar"><div class="trend-fill" style="width:'+pct+'%"></div></div><span>'+x.total+' / '+x.fault+'F</span></div>';}).join('');
+  }
+  function managementActionsHtml(s){
+    var a=s.actions.slice().sort(function(x,y){return y.date.localeCompare(x.date);}).slice(0,10);
+    if(!a.length) return '<strong>Action register</strong><p>No faults, remarks, or management actions recorded in this period.</p>';
+    return '<strong>Action register</strong>'+a.map(function(x){return '<div class="action-row"><b>'+escapeHtml(longLabel(x.date))+'</b> — '+escapeHtml(x.status)+' — '+escapeHtml(x.owner)+'<br>'+escapeHtml(x.remarks)+'</div>';}).join('');
+  }
+  function renderManagement(mode){
+    var r=managementRange(mode), keys=dateKeysInRange(r[0],r[1]), s=managementSummary(keys);
+    document.getElementById('managementSummary').innerHTML=managementStatsHtml(s);
+    var status=document.getElementById('managementStatus');
+    var cls=s.open>0?'bad':(s.fault>0 || s.completion<90?'warn':'good');
+    status.className='management-status '+cls;
+    status.textContent=s.open>0 ? ('MANAGEMENT ATTENTION: '+s.open+' open follow-up(s) require review.') : (s.fault>0 ? ('WATCH: '+s.fault+' fault(s) recorded; review the action register.') : 'STATUS: No open follow-ups recorded in this period.');
+    document.getElementById('managementTrend').innerHTML=managementTrendHtml(keys);
+    document.getElementById('managementActions').innerHTML=managementActionsHtml(s);
+  }
+  function openExecutiveReport(){
+    var r=managementRange('ALL'), keys=dateKeysInRange(r[0],r[1]), s=managementSummary(keys);
+    var actionRows=s.actions.slice().sort(function(a,b){return b.date.localeCompare(a.date);}).map(function(x){return '<tr><td>'+escapeHtml(longLabel(x.date))+'</td><td>'+escapeHtml(x.status)+'</td><td>'+escapeHtml(x.owner)+'</td><td>'+escapeHtml(x.remarks)+'</td></tr>';}).join('');
+    var html='<!doctype html><html><head><meta charset="utf-8"><title>Crane Inspection Executive Package</title><style>body{font-family:Arial,sans-serif;margin:30px;color:#20242a}h1{margin:0 0 4px}h2{margin-top:24px;border-bottom:2px solid #333;padding-bottom:5px}.sub{color:#666}.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:18px 0}.stat{border:1px solid #ccc;padding:12px;border-radius:8px}.stat b{display:block;font-size:22px;margin-bottom:4px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #ccc;padding:7px;text-align:left;font-size:12px}th{background:#eee}.callout{padding:12px;border:1px solid #ccc;border-radius:8px;margin:15px 0}@media print{button{display:none}}button{padding:9px 14px;margin-bottom:15px}</style></head><body>'
+      +'<button onclick="window.print()">Print / Save as PDF</button><h1>Crane Inspection Executive Package</h1><div class="sub">'+escapeHtml(draft.header.craneOwner||'')+' | '+escapeHtml(draft.header.project||'')+' | '+escapeHtml(draft.header.siteAddress||'')+'</div>'
+      +'<div class="sub">Reporting period: '+escapeHtml(r[0])+' through '+escapeHtml(r[1])+' | Generated '+new Date().toLocaleString()+'</div>'
+      +'<div class="grid"><div class="stat"><b>'+s.completion+'%</b>Inspection completion</div><div class="stat"><b>'+s.passRate+'%</b>Check pass rate</div><div class="stat"><b>'+s.fault+'</b>Faults recorded</div><div class="stat"><b>'+s.open+'</b>Open follow-ups</div><div class="stat"><b>'+s.inprog+'</b>In progress</div><div class="stat"><b>'+s.resolved+'</b>Resolved</div><div class="stat"><b>'+s.completed+'</b>Completed days</div><div class="stat"><b>'+s.days+'</b>Days reviewed</div></div>'
+      +'<div class="callout"><b>Executive status:</b> '+escapeHtml(s.open>0?'Management attention required. '+s.open+' open follow-up(s) are recorded.':(s.fault>0?'Monitor: faults were recorded; review the action register.':'No open follow-ups recorded in the selected history.'))+'</div>'
+      +'<h2>Management Action Register</h2><table><thead><tr><th>Date</th><th>Status</th><th>Owner</th><th>Notes / Remarks</th></tr></thead><tbody>'+(actionRows||'<tr><td colspan="4">No actions recorded.</td></tr>')+'</tbody></table>'
+      +'<h2>Inspection Detail</h2><table><thead><tr><th>Date</th><th>Approved</th><th>Checked</th><th>Faults</th><th>Status</th></tr></thead><tbody>'+reportRows(keys)+'</tbody></table>'
+      +'</body></html>';
+    var w=window.open('','_blank'); if(!w){alert('Please allow pop-ups for the executive report.');return;} w.document.open(); w.document.write(html); w.document.close();
+  }
+  function initManagement(){
+    ['30','90','Ytd','All'].forEach(function(x){var id='mgmt'+x+'Btn'; var el=document.getElementById(id); if(el) el.addEventListener('click',function(){renderManagement(x==='Ytd'?'YTD':x==='All'?'ALL':x);});});
+    document.getElementById('execReportBtn').addEventListener('click',openExecutiveReport);
+    renderManagement('30');
+  }
 
   /* ---------- reports / master overview ---------- */
   function dateKeysInRange(start,end){
@@ -859,6 +992,7 @@
       bindStaticListeners();
       initSignaturePad();
       initReports();
+      initManagement();
 
       if(!STORAGE_OK){
         setSaveStatus("Saved on this device automatically");
