@@ -9,7 +9,7 @@
 <link rel="manifest" href="manifest.json">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Crane Inspection">
-<title>Weekly Tower Crane Inspection</title>
+<title>Weekly Tower Crane Inspection — 1.1.1</title>
 <style>
   :root{
     --paper:#F3F0E8;
@@ -201,6 +201,7 @@
            placeholder="Crane owner / company name" autocomplete="off">
     <p class="nameplate-sub" id="nameplateSub"></p>
   </header>
+  <div style="text-align:right;font-size:.72rem;color:var(--muted);margin:-6px 2px 8px;">App version 1.1.1</div>
 
   <div class="card">
     <h2 class="card-title">Site &amp; Crane Info</h2>
@@ -750,8 +751,91 @@
     });
   }
 
-\n  /* ---------- reports / master overview ---------- */\n  function dateKeysInRange(start,end){\n    var out=[]; var k=start;\n    while(k<=end){ out.push(k); k=addDays(k,1); }\n    return out;\n  }\n  function monthRange(monthValue){\n    var p=(monthValue||'').split('-');\n    var y=parseInt(p[0],10), m=parseInt(p[1],10)-1;\n    if(!y || m<0) { var d=new Date(); y=d.getFullYear(); m=d.getMonth(); }\n    var first=toKey(new Date(y,m,1));\n    var last=toKey(new Date(y,m+1,0));\n    return [first,last];\n  }\n  function weekRange(ending){\n    var end=ending||todayKey();\n    return [addDays(end,-6),end];\n  }\n  function summarize(keys){\n    var completed=0, incomplete=0, ok=0, fault=0, blank=0, remarks=0, signed=0;\n    keys.forEach(function(k){\n      var d=draft.days[k];\n      if(!d) { incomplete++; return; }\n      var checks=Object.keys(d.checks||{});\n      ok += checks.filter(function(i){return d.checks[i]==='ok';}).length;\n      fault += checks.filter(function(i){return d.checks[i]==='fault';}).length;\n      blank += ITEMS.length-checks.length;\n      if(checks.length===ITEMS.length) completed++; else incomplete++;\n      if((d.remarks||'').trim()) remarks++;\n      if((d.operatorName||'').trim() || d.signature) signed++;\n    });\n    return {days:keys.length,completed:completed,incomplete:incomplete,ok:ok,fault:fault,blank:blank,remarks:remarks,signed:signed};\n  }\n  function reportStatsHtml(s){\n    return '<div class="report-stat"><b>'+s.completed+'</b><span>Completed days</span></div>'\n      +'<div class="report-stat"><b>'+s.incomplete+'</b><span>Incomplete days</span></div>'\n      +'<div class="report-stat"><b>'+s.fault+'</b><span>Faults marked</span></div>'\n      +'<div class="report-stat"><b>'+s.ok+'</b><span>Checks approved</span></div>'\n      +'<div class="report-stat"><b>'+s.blank+'</b><span>Blank checks</span></div>'\n      +'<div class="report-stat"><b>'+s.remarks+'</b><span>Days with remarks</span></div>'\n      +'<div class="report-stat"><b>'+s.signed+'</b><span>Days with operator entry</span></div>'\n      +'<div class="report-stat"><b>'+s.days+'</b><span>Days in range</span></div>';\n  }\n  function reportRows(keys){\n    return keys.map(function(k){\n      var d=draft.days[k];\n      if(!d) return '<tr><td>'+longLabel(k)+'</td><td>—</td><td>0 / '+ITEMS.length+'</td><td>—</td><td>Not started</td></tr>';\n      var c=Object.keys(d.checks||{}), faults=c.filter(function(i){return d.checks[i]==='fault';}).length;\n      var oks=c.filter(function(i){return d.checks[i]==='ok';}).length;\n      var status=c.length===ITEMS.length?'Complete':'Incomplete';\n      return '<tr><td>'+longLabel(k)+'</td><td>'+oks+'</td><td>'+c.length+' / '+ITEMS.length+'</td><td>'+faults+'</td><td>'+status+(d.remarks?' — Remarks':'')+'</td></tr>';\n    }).join('');\n  }\n  function openReport(title,keys){\n    var s=summarize(keys);\n    var rows=reportRows(keys);\n    var html='<!doctype html><html><head><meta charset="utf-8"><title>'+escapeHtml(title)+'</title>'\n      +'<style>body{font-family:Arial,sans-serif;margin:28px;color:#20242a}h1{margin-bottom:4px}small{color:#666}.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:20px 0}.stat{border:1px solid #ccc;padding:10px;border-radius:8px}.stat b{display:block;font-size:20px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #ccc;padding:7px;text-align:left}th{background:#eee}@media print{button{display:none}}button{padding:9px 14px;margin-bottom:15px}</style></head><body>'\n      +'<button onclick="window.print()">Print / Save as PDF</button><h1>'+escapeHtml(title)+'</h1>'\n      +'<small>'+escapeHtml(draft.header.craneOwner||'')+' '+escapeHtml(draft.header.project||'')+' | Generated '+new Date().toLocaleString()+'</small>'\n      +'<div class="grid">'+['completed','incomplete','fault','ok','blank','remarks','signed','days'].map(function(k){var labels={completed:'Completed',incomplete:'Incomplete',fault:'Faults',ok:'Approved checks',blank:'Blank checks',remarks:'Days with remarks',signed:'Operator entries',days:'Days in range'};return '<div class="stat"><b>'+s[k]+'</b>'+labels[k]+'</div>';}).join('')+'</div>'\n      +'<table><thead><tr><th>Date</th><th>Approved</th><th>Checked</th><th>Faults</th><th>Status</th></tr></thead><tbody>'+rows+'</tbody></table>'\n      +'</body></html>';
-    var w=window.open('','_blank'); if(!w){ alert('Please allow pop-ups for the report.'); return; }\n    w.document.open(); w.document.write(html); w.document.close();\n  }\n  function csvEscape(v){return '"'+String(v==null?'':v).replace(/"/g,'""')+'"';}\n  function exportCsv(){\n    var keys=Object.keys(draft.days).sort();\n    var lines=[['Date','Lessee','Project','Site Address','Crane Make','Model','Serial','Operator','Initials','Approved Checks','Fault Checks','Blank Checks','Remarks','Status'].map(csvEscape).join(',')];\n    keys.forEach(function(k){var d=draft.days[k], c=Object.keys(d.checks||{}), ok=c.filter(function(i){return d.checks[i]==='ok';}).length, fault=c.filter(function(i){return d.checks[i]==='fault';}).length; lines.push([k,draft.header.lessee,draft.header.project,draft.header.siteAddress,draft.header.craneMake,draft.header.model,draft.header.serial,d.operatorName||'',d.initials||'',ok,fault,ITEMS.length-c.length,d.remarks||'',c.length===ITEMS.length?'Complete':'Incomplete'].map(csvEscape).join(','));});\n    var blob=new Blob([lines.join('\n')],{type:'text/csv;charset=utf-8'}); var a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='crane-inspection-master.csv'; a.click(); setTimeout(function(){URL.revokeObjectURL(a.href);},1000);\n  }\n  function initReports(){\n    var now=new Date();\n    document.getElementById('reportMonth').value=now.getFullYear()+'-'+pad2(now.getMonth()+1);\n    document.getElementById('reportWeekEnding').value=todayKey();\n    function preview(keys,title){var s=summarize(keys); document.getElementById('reportSummary').innerHTML=reportStatsHtml(s); var p=document.getElementById('reportPreview'); p.hidden=false; p.innerHTML='<strong>'+escapeHtml(title)+'</strong><table class="report-table"><thead><tr><th>Date</th><th>Approved</th><th>Checked</th><th>Faults</th><th>Status</th></tr></thead><tbody>'+reportRows(keys)+'</tbody></table>'; }\n    document.getElementById('weeklyReportBtn').addEventListener('click',function(){var r=weekRange(document.getElementById('reportWeekEnding').value); preview(dateKeysInRange(r[0],r[1]),'Weekly Report: '+r[0]+' through '+r[1]); openReport('Weekly Crane Inspection Report — '+r[0]+' through '+r[1],dateKeysInRange(r[0],r[1]));});\n    document.getElementById('monthlyReportBtn').addEventListener('click',function(){var r=monthRange(document.getElementById('reportMonth').value); preview(dateKeysInRange(r[0],r[1]),'Monthly Report: '+r[0]+' through '+r[1]); openReport('Monthly Crane Inspection Report — '+r[0]+' through '+r[1],dateKeysInRange(r[0],r[1]));});\n    document.getElementById('masterReportBtn').addEventListener('click',function(){var keys=Object.keys(draft.days).sort(); if(!keys.length) keys=[todayKey()]; preview(keys,'Master Overview — all saved inspections'); openReport('Crane Inspection Master Overview',keys);});\n    document.getElementById('exportCsvBtn').addEventListener('click',exportCsv);\n  }\n
+
+  /* ---------- reports / master overview ---------- */
+  function dateKeysInRange(start,end){
+    var out=[]; var k=start;
+    while(k<=end){ out.push(k); k=addDays(k,1); }
+    return out;
+  }
+  function monthRange(monthValue){
+    var p=(monthValue||'').split('-');
+    var y=parseInt(p[0],10), m=parseInt(p[1],10)-1;
+    if(!y || m<0) { var d=new Date(); y=d.getFullYear(); m=d.getMonth(); }
+    var first=toKey(new Date(y,m,1));
+    var last=toKey(new Date(y,m+1,0));
+    return [first,last];
+  }
+  function weekRange(ending){
+    var end=ending||todayKey();
+    return [addDays(end,-6),end];
+  }
+  function summarize(keys){
+    var completed=0, incomplete=0, ok=0, fault=0, blank=0, remarks=0, signed=0;
+    keys.forEach(function(k){
+      var d=draft.days[k];
+      if(!d) { incomplete++; return; }
+      var checks=Object.keys(d.checks||{});
+      ok += checks.filter(function(i){return d.checks[i]==='ok';}).length;
+      fault += checks.filter(function(i){return d.checks[i]==='fault';}).length;
+      blank += ITEMS.length-checks.length;
+      if(checks.length===ITEMS.length) completed++; else incomplete++;
+      if((d.remarks||'').trim()) remarks++;
+      if((d.operatorName||'').trim() || d.signature) signed++;
+    });
+    return {days:keys.length,completed:completed,incomplete:incomplete,ok:ok,fault:fault,blank:blank,remarks:remarks,signed:signed};
+  }
+  function reportStatsHtml(s){
+    return '<div class="report-stat"><b>'+s.completed+'</b><span>Completed days</span></div>'
+      +'<div class="report-stat"><b>'+s.incomplete+'</b><span>Incomplete days</span></div>'
+      +'<div class="report-stat"><b>'+s.fault+'</b><span>Faults marked</span></div>'
+      +'<div class="report-stat"><b>'+s.ok+'</b><span>Checks approved</span></div>'
+      +'<div class="report-stat"><b>'+s.blank+'</b><span>Blank checks</span></div>'
+      +'<div class="report-stat"><b>'+s.remarks+'</b><span>Days with remarks</span></div>'
+      +'<div class="report-stat"><b>'+s.signed+'</b><span>Days with operator entry</span></div>'
+      +'<div class="report-stat"><b>'+s.days+'</b><span>Days in range</span></div>';
+  }
+  function reportRows(keys){
+    return keys.map(function(k){
+      var d=draft.days[k];
+      if(!d) return '<tr><td>'+longLabel(k)+'</td><td>—</td><td>0 / '+ITEMS.length+'</td><td>—</td><td>Not started</td></tr>';
+      var c=Object.keys(d.checks||{}), faults=c.filter(function(i){return d.checks[i]==='fault';}).length;
+      var oks=c.filter(function(i){return d.checks[i]==='ok';}).length;
+      var status=c.length===ITEMS.length?'Complete':'Incomplete';
+      return '<tr><td>'+longLabel(k)+'</td><td>'+oks+'</td><td>'+c.length+' / '+ITEMS.length+'</td><td>'+faults+'</td><td>'+status+(d.remarks?' — Remarks':'')+'</td></tr>';
+    }).join('');
+  }
+  function openReport(title,keys){
+    var s=summarize(keys);
+    var rows=reportRows(keys);
+    var html='<!doctype html><html><head><meta charset="utf-8"><title>'+escapeHtml(title)+'</title>'
+      +'<style>body{font-family:Arial,sans-serif;margin:28px;color:#20242a}h1{margin-bottom:4px}small{color:#666}.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:20px 0}.stat{border:1px solid #ccc;padding:10px;border-radius:8px}.stat b{display:block;font-size:20px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #ccc;padding:7px;text-align:left}th{background:#eee}@media print{button{display:none}}button{padding:9px 14px;margin-bottom:15px}</style></head><body>'
+      +'<button onclick="window.print()">Print / Save as PDF</button><h1>'+escapeHtml(title)+'</h1>'
+      +'<small>'+escapeHtml(draft.header.craneOwner||'')+' '+escapeHtml(draft.header.project||'')+' | Generated '+new Date().toLocaleString()+'</small>'
+      +'<div class="grid">'+['completed','incomplete','fault','ok','blank','remarks','signed','days'].map(function(k){var labels={completed:'Completed',incomplete:'Incomplete',fault:'Faults',ok:'Approved checks',blank:'Blank checks',remarks:'Days with remarks',signed:'Operator entries',days:'Days in range'};return '<div class="stat"><b>'+s[k]+'</b>'+labels[k]+'</div>';}).join('')+'</div>'
+      +'<table><thead><tr><th>Date</th><th>Approved</th><th>Checked</th><th>Faults</th><th>Status</th></tr></thead><tbody>'+rows+'</tbody></table>'
+      +'</body></html>';
+    var w=window.open('','_blank'); if(!w){ alert('Please allow pop-ups for the report.'); return; }
+    w.document.open(); w.document.write(html); w.document.close();
+  }
+  function csvEscape(v){return '"'+String(v==null?'':v).replace(/"/g,'""')+'"';}
+  function exportCsv(){
+    var keys=Object.keys(draft.days).sort();
+    var lines=[['Date','Lessee','Project','Site Address','Crane Make','Model','Serial','Operator','Initials','Approved Checks','Fault Checks','Blank Checks','Remarks','Status'].map(csvEscape).join(',')];
+    keys.forEach(function(k){var d=draft.days[k], c=Object.keys(d.checks||{}), ok=c.filter(function(i){return d.checks[i]==='ok';}).length, fault=c.filter(function(i){return d.checks[i]==='fault';}).length; lines.push([k,draft.header.lessee,draft.header.project,draft.header.siteAddress,draft.header.craneMake,draft.header.model,draft.header.serial,d.operatorName||'',d.initials||'',ok,fault,ITEMS.length-c.length,d.remarks||'',c.length===ITEMS.length?'Complete':'Incomplete'].map(csvEscape).join(','));});
+    var blob=new Blob([lines.join('\n')],{type:'text/csv;charset=utf-8'}); var a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='crane-inspection-master.csv'; a.click(); setTimeout(function(){URL.revokeObjectURL(a.href);},1000);
+  }
+  function initReports(){
+    var now=new Date();
+    document.getElementById('reportMonth').value=now.getFullYear()+'-'+pad2(now.getMonth()+1);
+    document.getElementById('reportWeekEnding').value=todayKey();
+    function preview(keys,title){var s=summarize(keys); document.getElementById('reportSummary').innerHTML=reportStatsHtml(s); var p=document.getElementById('reportPreview'); p.hidden=false; p.innerHTML='<strong>'+escapeHtml(title)+'</strong><table class="report-table"><thead><tr><th>Date</th><th>Approved</th><th>Checked</th><th>Faults</th><th>Status</th></tr></thead><tbody>'+reportRows(keys)+'</tbody></table>'; }
+    document.getElementById('weeklyReportBtn').addEventListener('click',function(){var r=weekRange(document.getElementById('reportWeekEnding').value); preview(dateKeysInRange(r[0],r[1]),'Weekly Report: '+r[0]+' through '+r[1]); openReport('Weekly Crane Inspection Report — '+r[0]+' through '+r[1],dateKeysInRange(r[0],r[1]));});
+    document.getElementById('monthlyReportBtn').addEventListener('click',function(){var r=monthRange(document.getElementById('reportMonth').value); preview(dateKeysInRange(r[0],r[1]),'Monthly Report: '+r[0]+' through '+r[1]); openReport('Monthly Crane Inspection Report — '+r[0]+' through '+r[1],dateKeysInRange(r[0],r[1]));});
+    document.getElementById('masterReportBtn').addEventListener('click',function(){var keys=Object.keys(draft.days).sort(); if(!keys.length) keys=[todayKey()]; preview(keys,'Master Overview — all saved inspections'); openReport('Crane Inspection Master Overview',keys);});
+    document.getElementById('exportCsvBtn').addEventListener('click',exportCsv);
+  }
+
   /* ---------- init ---------- */
   function init(){
     loadDraft().then(function(){
@@ -789,9 +873,14 @@
   // Enable offline use when served from HTTPS/localhost.
   if("serviceWorker" in navigator){
     window.addEventListener("load", function(){
-      navigator.serviceWorker.register("./sw.js").catch(function(err){
+      navigator.serviceWorker.register("./sw.js", {updateViaCache:"none"}).then(function(reg){
+        reg.update();
+      }).catch(function(err){
         console.warn("Offline app setup failed:", err);
       });
+    });
+    navigator.serviceWorker.addEventListener("controllerchange", function(){
+      if(!window.__swRefreshing){ window.__swRefreshing = true; window.location.reload(); }
     });
   }
 })();
