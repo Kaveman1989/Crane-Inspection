@@ -1,0 +1,18 @@
+{
+  "name": "Tower Crane Inspection",
+  "short_name": "Crane Inspection",
+  "description": "Daily tower crane inspection log",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#F3F0E8",
+  "theme_color": "#2E4759",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
