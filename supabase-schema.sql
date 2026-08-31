@@ -77,7 +77,7 @@ create policy "assignments executive manage" on public.crane_assignments for all
 create policy "inspections read" on public.inspections for select to authenticated
 using (public.is_executive() or (operator_id = auth.uid() and exists(select 1 from public.crane_assignments a where a.crane_id = inspections.crane_id and a.operator_id = auth.uid() and a.active)));
 create policy "inspections insert operator" on public.inspections for insert to authenticated
-with check (not public.is_executive() and operator_id = auth.uid() and exists(select 1 from public.crane_assignments a where a.crane_id = inspections.crane_id and a.operator_id = auth.uid() and a.active));
+with check (public.is_executive() or (operator_id = auth.uid() and exists(select 1 from public.crane_assignments a where a.crane_id = inspections.crane_id and a.operator_id = auth.uid() and a.active)));
 create policy "inspections update" on public.inspections for update to authenticated
 using (public.is_executive() or (operator_id = auth.uid() and exists(select 1 from public.crane_assignments a where a.crane_id = inspections.crane_id and a.operator_id = auth.uid() and a.active)))
 with check (public.is_executive() or (operator_id = auth.uid() and exists(select 1 from public.crane_assignments a where a.crane_id = inspections.crane_id and a.operator_id = auth.uid() and a.active)));

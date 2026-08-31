@@ -1,16 +1,22 @@
 /* Cloud bridge for the operator workspace. Uses Supabase when configured; otherwise demo/local mode. */
 (function(){
   window.CRANE_OPERATOR_BOOT = async function(){
-    const auth = await window.craneRequireRole('operator');
+    const auth = await window.craneRequireAnyRole(['operator','executive']);
     if(!auth) return null;
     const params = new URLSearchParams(location.search);
     let craneId = params.get('crane');
     let cranes = [];
     let cloud = window.craneAuthReady ? window.craneSupabase : null;
     if(cloud){
-      const {data:assignments,error} = await cloud.from('crane_assignments').select('crane_id,starts_on,ends_on,active,cranes(*)').eq('operator_id',auth.user.id).eq('active',true);
-      if(error) throw error;
-      cranes=(assignments||[]).map(a=>a.cranes).filter(Boolean).filter(c=>c.active);
+      let assignments=[];
+      if(auth.role==='executive'){
+        const {data,error}=await cloud.from('cranes').select('*').eq('active',true).order('project');
+        if(error) throw error; cranes=data||[];
+      } else {
+        const {data,error} = await cloud.from('crane_assignments').select('crane_id,starts_on,ends_on,active,cranes(*)').eq('operator_id',auth.user.id).eq('active',true);
+        if(error) throw error;
+        cranes=(data||[]).map(a=>a.cranes).filter(Boolean).filter(c=>c.active);
+      }
       if(!craneId || !cranes.some(c=>c.id===craneId)) craneId=cranes[0]?.id||null;
     } else {
       cranes=[{id:'demo-crane-1',owner:'Demo Company',lessee:'Demo Lessee',project:'Demo Project',site_address:'Demo Site',make:'Potain',model:'MDT 219',serial:'DEMO-001',active:true}];

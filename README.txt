@@ -41,3 +41,11 @@ NEXT PRODUCTION STEPS
 - Sync signatures/photos to Supabase Storage.
 - Add audit trail and immutable inspection history.
 - Add multi-company tenancy if multiple clients will use the system.
+
+
+ACCOUNT CREATION / EXECUTIVE OPERATOR ACCESS
+- The executive app includes Create User. It calls the Supabase Edge Function at /functions/v1/create-account.
+- Deploy supabase/functions/create-account/index.ts as an Edge Function named create-account.
+- The function uses the built-in SUPABASE_SERVICE_ROLE_KEY on the server; never place that secret in config.js or GitHub.
+- Executives can open the operator workspace and inspect/submit from any active crane.
+- If you re-run the SQL schema on an existing project, the inspection insert policy is updated to allow executive-mode submissions.

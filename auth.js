@@ -11,5 +11,14 @@
     if(error || !profile || !profile.active || profile.role !== role){ alert('This account does not have access to this area.'); await window.craneSupabase.auth.signOut(); location.href='./index.html'; return null; }
     return {demo:false,role:profile.role,user:session.user,profile:profile};
   };
+  window.craneRequireAnyRole = async function(roles){
+    roles = Array.isArray(roles) ? roles : [roles];
+    if(!window.craneAuthReady) return {demo:true, role:roles[0], user:null, profile:{role:roles[0],full_name:'Demo User'}};
+    const {data:{session}} = await window.craneSupabase.auth.getSession();
+    if(!session){ location.href='./index.html'; return null; }
+    const {data:profile,error} = await window.craneSupabase.from('profiles').select('*').eq('id',session.user.id).single();
+    if(error || !profile || !profile.active || !roles.includes(profile.role)){ alert('This account does not have access to this area.'); await window.craneSupabase.auth.signOut(); location.href='./index.html'; return null; }
+    return {demo:false,role:profile.role,user:session.user,profile:profile};
+  };
   window.craneSignOut = async function(){ if(window.craneAuthReady) await window.craneSupabase.auth.signOut(); location.href='./index.html'; };
 })();
