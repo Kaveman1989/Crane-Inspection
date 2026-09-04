@@ -66,7 +66,7 @@
     }
 
     if(cloud){
-      const {data:rows,error} = await cloud.from('inspections').select('inspection_date,data,status').eq('crane_id',crane.id).order('inspection_date');
+      const {data:rows,error} = await cloud.from('inspections').select('id,inspection_date,data,status').eq('crane_id',crane.id).order('inspection_date');
       if(error) throw error;
       const draft={header:{craneOwner:crane.owner,lessee:crane.lessee,project:crane.project,siteAddress:crane.site_address,craneMake:crane.make,model:crane.model,serial:crane.serial},days:{},lastOperatorName:auth.profile.full_name||''};
       (rows||[]).forEach(r=>{ if(r.data && r.data.day) draft.days[r.inspection_date]=r.data.day; });
@@ -81,8 +81,48 @@
         const day=draft.days[date]; if(!day) return true;
         const c=day.checks||{}; const keys=Object.keys(c); const status=keys.length===0?'incomplete':(keys.length===ITEM_COUNT?'complete':'incomplete');
         const payload={crane_id:this.crane.id,operator_id:this.auth.user.id,inspection_date:date,data:{day:day,header:draft.header},status:status,updated_at:new Date().toISOString()};
-        const {error}=await this.cloud.from('inspections').upsert(payload,{onConflict:'crane_id,inspection_date'});
-        if(error){console.error(error);return false;} return true;
+        const {data:saved,error}=await this.cloud.from('inspections').upsert(payload,{onConflict:'crane_id,inspection_date'}).select('id').single();
+        if(error){console.error(error);return false;}
+        if(saved && day) day._inspectionId=saved.id;
+        return true;
+      },
+      getPhotos:async function(date){
+        if(!this.cloud) return [];
+        const {data,error}=await this.cloud.from('inspection_photos').select('id,storage_path,file_name,mime_type,created_at').eq('crane_id',this.crane.id).eq('inspection_date',date).order('created_at');
+        if(error){console.error(error);return [];}
+        const photos=data||[];
+        for(const photo of photos){
+          const r=await this.cloud.storage.from('inspection-photos').createSignedUrl(photo.storage_path,3600);
+          photo.url=r.data?.signedUrl||'';
+        }
+        return photos;
+      },
+      uploadPhoto:async function(date,file){
+        if(!this.cloud || !file) return null;
+        let day=draft?.days?.[date];
+        let inspectionId=day?._inspectionId;
+        if(!inspectionId){
+          const ok=await this.saveCurrent(draft,date);
+          if(!ok) return null;
+          const q=await this.cloud.from('inspections').select('id').eq('crane_id',this.crane.id).eq('inspection_date',date).single();
+          inspectionId=q.data?.id;
+        }
+        if(!inspectionId) return null;
+        const ext=(file.name.split('.').pop()||'jpg').toLowerCase().replace(/[^a-z0-9]/g,'')||'jpg';
+        const path=this.crane.id+'/'+date+'/'+crypto.randomUUID()+'.'+ext;
+        const up=await this.cloud.storage.from('inspection-photos').upload(path,file,{contentType:file.type||'image/jpeg',upsert:false});
+        if(up.error){console.error(up.error);return null;}
+        const ins=await this.cloud.from('inspection_photos').insert({inspection_id:inspectionId,crane_id:this.crane.id,operator_id:this.auth.user.id,inspection_date:date,storage_path:path,file_name:file.name||'photo',mime_type:file.type||'image/jpeg'}).select('id,storage_path,file_name,mime_type,created_at').single();
+        if(ins.error){console.error(ins.error);await this.cloud.storage.from('inspection-photos').remove([path]);return null;}
+        const signed=await this.cloud.storage.from('inspection-photos').createSignedUrl(path,3600);
+        return {...ins.data,url:signed.data?.signedUrl||''};
+      },
+      deletePhoto:async function(photo){
+        if(!this.cloud || !photo) return false;
+        const r=await this.cloud.from('inspection_photos').delete().eq('id',photo.id);
+        if(r.error){console.error(r.error);return false;}
+        await this.cloud.storage.from('inspection-photos').remove([photo.storage_path]);
+        return true;
       }};
     injectOperatorBar(window.CRANE_OPERATOR_CONTEXT);
     return window.CRANE_OPERATOR_CONTEXT;

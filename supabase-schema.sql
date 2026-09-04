@@ -49,6 +49,27 @@ create index if not exists crane_assignments_operator_idx on public.crane_assign
 create index if not exists inspections_crane_date_idx on public.inspections(crane_id, inspection_date);
 create index if not exists inspections_operator_idx on public.inspections(operator_id);
 
+-- Permanent inspection photo metadata. Photos belong to the inspection/crane,
+-- not to the operator, so changing operators never removes the photo history.
+create table if not exists public.inspection_photos (
+  id uuid primary key default gen_random_uuid(),
+  inspection_id uuid not null references public.inspections(id) on delete cascade,
+  crane_id uuid not null references public.cranes(id) on delete cascade,
+  operator_id uuid not null references public.profiles(id) on delete restrict,
+  inspection_date date not null,
+  storage_path text not null,
+  file_name text not null default '',
+  mime_type text not null default 'image/jpeg',
+  created_at timestamptz not null default now()
+);
+create index if not exists inspection_photos_inspection_idx on public.inspection_photos(inspection_id);
+create index if not exists inspection_photos_crane_date_idx on public.inspection_photos(crane_id, inspection_date);
+
+-- Private bucket: files are accessed through short-lived signed URLs.
+insert into storage.buckets (id, name, public)
+values ('inspection-photos', 'inspection-photos', false)
+on conflict (id) do update set public=false;
+
 alter table public.profiles enable row level security;
 alter table public.cranes enable row level security;
 alter table public.crane_assignments enable row level security;
@@ -75,7 +96,7 @@ create policy "assignments executive manage" on public.crane_assignments for all
 
 -- Inspections: executives see/manage all; operators only assigned cranes and their own rows.
 create policy "inspections read" on public.inspections for select to authenticated
-using (public.is_executive() or (operator_id = auth.uid() and exists(select 1 from public.crane_assignments a where a.crane_id = inspections.crane_id and a.operator_id = auth.uid() and a.active)));
+using (public.is_executive() or exists(select 1 from public.crane_assignments a where a.crane_id = inspections.crane_id and a.operator_id = auth.uid() and a.active and (a.starts_on is null or a.starts_on <= current_date) and (a.ends_on is null or a.ends_on >= current_date)));
 create policy "inspections insert operator" on public.inspections for insert to authenticated
 with check (public.is_executive() or (operator_id = auth.uid() and exists(select 1 from public.crane_assignments a where a.crane_id = inspections.crane_id and a.operator_id = auth.uid() and a.active)));
 create policy "inspections update" on public.inspections for update to authenticated
@@ -140,3 +161,22 @@ as $$
 $$;
 
 grant execute on function public.get_my_assigned_cranes() to authenticated;
+
+
+-- Photo metadata follows crane history. Any currently assigned operator can read it;
+-- executives can manage everything. Operators may add photos to their assigned crane.
+alter table public.inspection_photos enable row level security;
+create policy "inspection photos read" on public.inspection_photos for select to authenticated
+using (public.is_executive() or exists(select 1 from public.crane_assignments a where a.crane_id = inspection_photos.crane_id and a.operator_id = auth.uid() and a.active and (a.starts_on is null or a.starts_on <= current_date) and (a.ends_on is null or a.ends_on >= current_date)));
+create policy "inspection photos insert" on public.inspection_photos for insert to authenticated
+with check (public.is_executive() or (operator_id = auth.uid() and exists(select 1 from public.crane_assignments a where a.crane_id = inspection_photos.crane_id and a.operator_id = auth.uid() and a.active and (a.starts_on is null or a.starts_on <= current_date) and (a.ends_on is null or a.ends_on >= current_date))));
+create policy "inspection photos delete" on public.inspection_photos for delete to authenticated
+using (public.is_executive() or operator_id = auth.uid());
+
+-- Storage objects use crane_id as the first path component.
+create policy "inspection photo objects read" on storage.objects for select to authenticated
+using (bucket_id = 'inspection-photos' and (public.is_executive() or exists(select 1 from public.crane_assignments a where a.crane_id::text = (storage.foldername(name))[1] and a.operator_id = auth.uid() and a.active and (a.starts_on is null or a.starts_on <= current_date) and (a.ends_on is null or a.ends_on >= current_date))));
+create policy "inspection photo objects insert" on storage.objects for insert to authenticated
+with check (bucket_id = 'inspection-photos' and (public.is_executive() or exists(select 1 from public.crane_assignments a where a.crane_id::text = (storage.foldername(name))[1] and a.operator_id = auth.uid() and a.active and (a.starts_on is null or a.starts_on <= current_date) and (a.ends_on is null or a.ends_on >= current_date))));
+create policy "inspection photo objects delete" on storage.objects for delete to authenticated
+using (bucket_id = 'inspection-photos' and (public.is_executive() or owner_id = auth.uid()));

@@ -278,6 +278,19 @@
     </div>
   </div>
 
+  <div class="card" id="photosCard">
+    <h2 class="card-title">Inspection Photos <span class="date-tag" id="photosDateTag"></span></h2>
+    <p class="small">Photos are permanently attached to this crane inspection and remain with the crane's history when operators change.</p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0;">
+      <button type="button" id="takePhotoBtn" class="tag-btn amber">📷 Take Photo</button>
+      <button type="button" id="choosePhotoBtn" class="tag-btn ghost">Add From Device</button>
+      <input id="photoCameraInput" type="file" accept="image/*" capture="environment" hidden>
+      <input id="photoFileInput" type="file" accept="image/*" multiple hidden>
+    </div>
+    <div id="photoStatus" class="small"></div>
+    <div id="photoGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;"></div>
+  </div>
+
   <div class="card">
     <h2 class="card-title">Remarks <span class="date-tag" id="remarksDateTag"></span></h2>
     <textarea id="remarks" rows="4" placeholder="Note any faults, follow-ups, or site conditions..."></textarea>
@@ -609,6 +622,7 @@
     hydrateDayFields();
     loadSignatureForSelectedDate();
     if(window.CRANE_OPERATOR_CONTEXT && window.CRANE_OPERATOR_CONTEXT.setDate) window.CRANE_OPERATOR_CONTEXT.setDate(selectedDate);
+    renderPhotos();
   }
 
   /* ---------- signature pad (per selected day) ---------- */
@@ -742,8 +756,45 @@
     });
   }
 
+  async function renderPhotos(){
+    var grid=document.getElementById("photoGrid"), status=document.getElementById("photoStatus");
+    if(!grid) return;
+    grid.innerHTML=""; status.textContent="";
+    document.getElementById("photosDateTag").textContent=shortLabel(selectedDate);
+    var ctx=window.CRANE_OPERATOR_CONTEXT;
+    if(!ctx || !ctx.getPhotos){ status.textContent="Photos require the Supabase cloud connection."; return; }
+    status.textContent="Loading photos…";
+    var photos=await ctx.getPhotos(selectedDate);
+    if(selectedDate!==ctx.currentDate) return;
+    if(!photos.length){ status.textContent="No photos attached to this inspection yet."; return; }
+    status.textContent=photos.length+" photo"+(photos.length===1?"":"s")+" saved";
+    photos.forEach(function(photo){
+      var wrap=document.createElement("div"); wrap.style="position:relative;border:1px solid #dad5c7;border-radius:10px;overflow:hidden;background:#f7f4ec;";
+      var img=document.createElement("img"); img.src=photo.url; img.alt=photo.file_name||"Inspection photo"; img.style="display:block;width:100%;aspect-ratio:1;object-fit:cover;cursor:pointer;"; img.onclick=function(){window.open(photo.url,"_blank")}; wrap.appendChild(img);
+      var del=document.createElement("button"); del.type="button"; del.textContent="×"; del.title="Delete photo"; del.style="position:absolute;right:5px;top:5px;border:0;border-radius:50%;width:28px;height:28px;background:rgba(0,0,0,.7);color:white;font-size:18px;line-height:1;";
+      del.onclick=function(){
+        showConfirm("Delete this inspection photo? This removes it from the permanent crane inspection record.",async function(){
+          del.disabled=true; var ok=await ctx.deletePhoto(photo); if(ok) renderPhotos(); else del.disabled=false;
+        });
+      }; wrap.appendChild(del); grid.appendChild(wrap);
+    });
+  }
+  async function addPhotoFile(file){
+    if(!file) return;
+    var ctx=window.CRANE_OPERATOR_CONTEXT, status=document.getElementById("photoStatus");
+    if(!ctx || !ctx.uploadPhoto){ status.textContent="Cloud storage is not available."; return; }
+    status.textContent="Saving photo…";
+    var photo=await ctx.uploadPhoto(selectedDate,file);
+    if(photo){ status.textContent="Photo saved permanently to this crane's inspection history."; renderPhotos(); }
+    else status.textContent="Photo upload failed. Check your connection and try again.";
+  }
+
   /* ---------- static listeners ---------- */
   function bindStaticListeners(){
+    document.getElementById("takePhotoBtn").addEventListener("click",function(){document.getElementById("photoCameraInput").click();});
+    document.getElementById("choosePhotoBtn").addEventListener("click",function(){document.getElementById("photoFileInput").click();});
+    document.getElementById("photoCameraInput").addEventListener("change",function(e){var f=e.target.files&&e.target.files[0]; if(f) addPhotoFile(f); e.target.value="";});
+    document.getElementById("photoFileInput").addEventListener("change",function(e){Array.from(e.target.files||[]).forEach(addPhotoFile); e.target.value="";});
     document.getElementById("checklist").addEventListener("click", function(e){
       var btn = e.target.closest(".check-box");
       if(!btn) return;

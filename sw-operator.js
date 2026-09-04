@@ -1,4 +1,4 @@
-const CACHE = "crane-inspection-v1-1-1";
+const CACHE = "crane-inspection-v1-5-0";
 const ASSETS = ["./", "./index.html", "./manifest.json", "./icon.svg"];
 
 self.addEventListener("install", event => {
