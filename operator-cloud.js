@@ -21,21 +21,35 @@
         if(error) throw error;
         cranes=data||[];
       } else {
-        // Fetch assignment rows directly. This avoids a nested cranes(*) query
-        // being blocked by the crane table's RLS policy.
-        const {data,error}=await cloud.from('crane_assignments')
-          .select('id,crane_id,starts_on,ends_on,active')
-          .eq('operator_id',auth.user.id)
-          .eq('active',true);
-        if(error) throw error;
-        assignments=(data||[]).filter(assignmentIsCurrent);
-
-        const ids=[...new Set(assignments.map(a=>a.crane_id).filter(Boolean))];
-        if(ids.length){
-          const {data:craneRows,error:craneError}=await cloud.from('cranes')
-            .select('*').in('id',ids).eq('active',true).order('project');
-          if(craneError) throw craneError;
-          cranes=craneRows||[];
+        // Use a SECURITY DEFINER RPC so the operator gets the assigned crane
+        // in one trusted query. This avoids RLS/nested-relationship filtering
+        // between crane_assignments and cranes.
+        let rpcError=null;
+        const rpc=await cloud.rpc('get_my_assigned_cranes');
+        rpcError=rpc.error;
+        if(!rpcError){
+          const rows=rpc.data||[];
+          assignments=rows.map(r=>({id:r.assignment_id,crane_id:r.crane_id,starts_on:r.starts_on,ends_on:r.ends_on,active:r.assignment_active}));
+          cranes=rows.filter(r=>r.crane_active).map(r=>({
+            id:r.crane_id,owner:r.owner,lessee:r.lessee,project:r.project,site_address:r.site_address,
+            make:r.make,model:r.model,serial:r.serial,active:r.crane_active
+          }));
+        } else {
+          // Fallback for databases where the RPC has not been installed yet.
+          console.warn('Assigned-crane RPC unavailable; using direct RLS query:',rpcError);
+          const {data,error}=await cloud.from('crane_assignments')
+            .select('id,crane_id,starts_on,ends_on,active')
+            .eq('operator_id',auth.user.id)
+            .eq('active',true);
+          if(error) throw error;
+          assignments=(data||[]).filter(assignmentIsCurrent);
+          const ids=[...new Set(assignments.map(a=>a.crane_id).filter(Boolean))];
+          if(ids.length){
+            const {data:craneRows,error:craneError}=await cloud.from('cranes')
+              .select('*').in('id',ids).eq('active',true).order('project');
+            if(craneError) throw craneError;
+            cranes=craneRows||[];
+          }
         }
       }
 

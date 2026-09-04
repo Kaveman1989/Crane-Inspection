@@ -90,3 +90,53 @@ as $$ begin insert into public.profiles(id, full_name, role) values (new.id, coa
 
 drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created after insert on auth.users for each row execute procedure public.handle_new_user();
+
+
+-- Reliable operator crane lookup. This function runs with the owner's
+-- privileges so RLS cannot hide a crane that is legitimately assigned.
+create or replace function public.get_my_assigned_cranes()
+returns table (
+  assignment_id uuid,
+  crane_id uuid,
+  starts_on date,
+  ends_on date,
+  assignment_active boolean,
+  owner text,
+  lessee text,
+  project text,
+  site_address text,
+  make text,
+  model text,
+  serial text,
+  crane_active boolean
+)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select
+    a.id,
+    c.id,
+    a.starts_on,
+    a.ends_on,
+    a.active,
+    c.owner,
+    c.lessee,
+    c.project,
+    c.site_address,
+    c.make,
+    c.model,
+    c.serial,
+    c.active
+  from public.crane_assignments a
+  join public.cranes c on c.id = a.crane_id
+  where a.operator_id = auth.uid()
+    and a.active = true
+    and c.active = true
+    and (a.starts_on is null or a.starts_on <= current_date)
+    and (a.ends_on is null or a.ends_on >= current_date)
+  order by c.project;
+$$;
+
+grant execute on function public.get_my_assigned_cranes() to authenticated;
