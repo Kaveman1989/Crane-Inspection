@@ -165,6 +165,7 @@
 
   /* ---------- Save status / footer ---------- */
   .save-status{font-size:11.5px;color:var(--muted);text-align:center;margin:6px 0 0;min-height:14px;}
+  .photo-preview{margin-top:10px;}
   .footnote{text-align:center;font-size:11px;color:var(--muted);margin-top:16px;line-height:1.5;padding:0 10px;}
 
   select{font:inherit;font-size:14.5px;color:var(--ink);border:1.5px solid var(--line);border-radius:8px;padding:9px 10px;background:#fffefb;font-weight:500;width:100%;}
@@ -221,7 +222,7 @@
            placeholder="Crane owner / company name" autocomplete="off">
     <p class="nameplate-sub" id="nameplateSub"></p>
   </header>
-  <div style="text-align:right;font-size:.72rem;color:var(--muted);margin:-6px 2px 8px;">Inspection workspace 1.5</div>
+  <div style="text-align:right;font-size:.72rem;color:var(--muted);margin:-6px 2px 8px;">Inspection workspace 1.5.1</div>
 
   <div class="card">
     <h2 class="card-title">Assigned Crane</h2>
@@ -286,7 +287,12 @@
 
   <div class="card">
     <h2 class="card-title">Inspection Photos <span class="date-tag" id="photoDateTag"></span></h2>
-    <input id="photoInput" type="file" accept="image/*" capture="environment">
+    <div class="toolbar">
+      <button type="button" id="takePhotoBtn" class="tag-btn amber">📷 Take Photo</button>
+      <button type="button" id="choosePhotoBtn" class="tag-btn ghost">Choose Photo</button>
+    </div>
+    <input id="photoInput" type="file" accept="image/*" capture="environment" hidden>
+    <div id="photoPreview" class="photo-preview"></div>
     <p class="footnote" style="text-align:left;padding:0;margin:8px 0 0;">Photos are attached to this inspection date and available to Management.</p>
     <div id="photoStatus" class="save-status"></div>
   </div>
@@ -303,16 +309,8 @@
     </div>
   </div>
 
-    <div class="report-filter">
-      <label>Report month <input type="month" id="reportMonth"></label>
-      <label>Week ending <input type="date" id="reportWeekEnding"></label>
-    </div>
-    <div id="reportSummary" class="report-summary"></div>
-    <div id="reportPreview" class="report-preview" hidden></div>
-    <p class="footnote">Reports use the inspections saved on this device. Print/Save as PDF from the report window for a permanent document.</p>
-  </div>
-
   <p class="save-status" id="saveStatus"></p>
+  </div>
   <p class="footnote">Entries save automatically as you go, organized by date — use the calendar above to revisit any day.</p>
 
   <div class="confirm-overlay" id="confirmOverlay" hidden>
@@ -550,10 +548,6 @@
     document.getElementById("remarks").value = d.remarks || "";
     document.getElementById("dailyInitials").value = d.initials || "";
     document.getElementById("operatorName").value = d.operatorName || (window.CRANE_OPERATOR_CONTEXT?.auth?.profile?.full_name || "");
-    document.getElementById("followUpStatus").value = d.followUpStatus || ((Object.keys(d.checks||{}).some(function(i){return d.checks[i]==='fault';})) ? "Open" : "N/A");
-    document.getElementById("actionOwner").value = d.actionOwner || "";
-    document.getElementById("managementNotes").value = d.managementNotes || "";
-    document.getElementById("managementDateTag").textContent = "— " + shortLabel(selectedDate);
   }
 
   /* ---------- selecting a date ---------- */
@@ -627,7 +621,8 @@
       }
       setSaveStatus("Saving…");
       storageSet(SIG_PREFIX + key, dataUrl).then(function(ok){
-        setSaveStatus(ok ? "Signature saved" : "Signature save failed — try again");
+        setSaveStatus(ok ? "Signature saved — saving inspection…" : "Signature save failed — try again");
+        if(ok) queueSave();
       });
     }
     canvas.addEventListener("pointerup", end);
@@ -669,31 +664,45 @@
     var el = document.getElementById("saveStatus");
     if(el) el.textContent = msg;
   }
+  function currentLocalKey(){
+    try{
+      var ctx=window.CRANE_OPERATOR_CONTEXT;
+      if(ctx && ctx.auth && ctx.auth.user && ctx.crane) return STORAGE_NS+":"+ctx.auth.user.id+":"+ctx.crane.id+":draft";
+    }catch(e){}
+    return STORAGE_NS+":draft";
+  }
+  function saveNow(){
+    clearTimeout(saveTimer);
+    setSaveStatus("Saving…");
+    return storageSet(currentLocalKey(),JSON.stringify(draft)).then(function(ok){
+      var ctx=window.CRANE_OPERATOR_CONTEXT;
+      if(ctx && ctx.saveCurrent){
+        return ctx.saveCurrent(draft,selectedDate).then(function(){
+          var stamp=new Date().toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"});
+          setSaveStatus("Saved to cloud " + stamp);
+          return true;
+        });
+      }
+      setSaveStatus(ok?"Saved on this device":"Save failed");
+      return ok;
+    }).catch(function(err){
+      console.error(err);
+      setSaveStatus(err.message||"Save failed");
+      return false;
+    });
+  }
+
   function queueSave(){
     clearTimeout(saveTimer);
     setSaveStatus("Saving…");
-    saveTimer=setTimeout(function(){
-      var localKey=STORAGE_NS+":draft";
-      try{if(window.CRANE_OPERATOR_CONTEXT?.auth?.user&&window.CRANE_OPERATOR_CONTEXT?.crane) localKey=STORAGE_NS+":"+window.CRANE_OPERATOR_CONTEXT.auth.user.id+":"+window.CRANE_OPERATOR_CONTEXT.crane.id+":draft";}catch(e){}
-      storageSet(localKey,JSON.stringify(draft)).then(function(ok){
-        if(window.CRANE_OPERATOR_CONTEXT && window.CRANE_OPERATOR_CONTEXT.saveCurrent){
-          return window.CRANE_OPERATOR_CONTEXT.saveCurrent(draft,selectedDate).then(function(){
-            var stamp=new Date().toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"});
-            setSaveStatus("Saved to cloud " + stamp);
-          }).catch(function(err){
-            console.error(err); setSaveStatus(err.message||"Cloud save failed");
-          });
-        }
-        setSaveStatus(ok?"Saved on this device":"Save failed");
-      });
-    },350);
+    saveTimer=setTimeout(function(){ saveNow(); },350);
   }
 
   function loadDraft(){
     var key="crane-inspect:draft";
     try{
       var ctx=window.CRANE_OPERATOR_CONTEXT;
-      if(ctx && ctx.auth && ctx.user && ctx.crane) key="crane-inspect:"+ctx.auth.user.id+":"+ctx.crane.id+":draft";
+      if(ctx && ctx.auth && ctx.auth.user && ctx.crane) key="crane-inspect:"+ctx.auth.user.id+":"+ctx.crane.id+":draft";
     }catch(e){}
     return storageGet(key).then(function(raw){
       if(raw){try{var parsed=JSON.parse(raw);draft=freshDraft();draft.header=Object.assign(defaultHeader(),parsed.header||{});draft.days=parsed.days||{};draft.lastOperatorName=parsed.lastOperatorName||"";return;}catch(e){}}
@@ -777,15 +786,21 @@
       draft.lastOperatorName = e.target.value;
       queueSave();
     });
+    document.getElementById("saveInspectionBtn").addEventListener("click", function(){ saveNow(); });
   }
 
 
   /* ---------- inspection photos ---------- */
   function initPhotos(){
     var input=document.getElementById("photoInput"); if(!input)return;
+    var take=document.getElementById("takePhotoBtn"), choose=document.getElementById("choosePhotoBtn");
+    if(take) take.addEventListener("click",function(){ input.setAttribute("capture","environment"); input.click(); });
+    if(choose) choose.addEventListener("click",function(){ input.removeAttribute("capture"); input.click(); });
     input.addEventListener("change",function(){
       var file=input.files&&input.files[0]; if(!file)return;
-      var st=document.getElementById("photoStatus");st.textContent="Uploading photo…";
+      var st=document.getElementById("photoStatus"), preview=document.getElementById("photoPreview");
+      if(preview){ preview.innerHTML="<img alt=\"Selected inspection photo\" style=\"width:100%;max-height:240px;object-fit:contain;border-radius:10px;border:1px solid var(--line);background:#fff;\">"; var img=preview.querySelector("img"); img.src=URL.createObjectURL(file); }
+      st.textContent="Saving photo…";
       var ctx=window.CRANE_OPERATOR_CONTEXT;
       if(!ctx||!ctx.uploadPhoto){st.textContent="Photo upload unavailable";return;}
       ctx.uploadPhoto(file,selectedDate).then(function(){st.textContent="Photo saved to this inspection.";input.value="";}).catch(function(e){console.error(e);st.textContent=e.message||"Photo upload failed";});
@@ -828,6 +843,8 @@
       }
     }).catch(function(err){
       console.error("Inspection app init error:", err);
+      var el=document.getElementById("saveStatus");
+      if(el) el.textContent="App error: "+(err.message||err);
     });
   }
 

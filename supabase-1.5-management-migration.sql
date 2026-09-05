@@ -1,4 +1,20 @@
--- Crane Inspection 1.5 migration
+-- Crane Inspection 1.5.1 migration
+
+-- Ensure management role helper exists before policies use it.
+create or replace function public.is_executive()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.profiles
+    where id = auth.uid() and active = true and role in ('executive','manager')
+  );
+$$;
+grant execute on function public.is_executive() to authenticated;
+
 -- IMPORTANT: This is intentionally additive/idempotent. It does not recreate or delete your existing tables.
 
 create table if not exists public.inspection_photos (

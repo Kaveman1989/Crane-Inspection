@@ -1,4 +1,4 @@
-Crane Inspection 1.5
+Crane Inspection 1.5.1
 
 Major changes:
 - Operator side is inspection-only: assigned crane, date/calendar, 29-point checklist, remarks, initials, signature, inspection photos.
@@ -9,6 +9,6 @@ Major changes:
 
 Setup:
 1. Upload the files to the GitHub Pages repo.
-2. Run supabase-1.5-management-migration.sql in Supabase SQL Editor. It is additive/idempotent.
+2. Run supabase-1.5.1-management-migration.sql in Supabase SQL Editor. It is additive/idempotent.
 3. Deploy/wait for GitHub Pages.
 4. Hard refresh the operator and management pages.
