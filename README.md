@@ -1,13 +1,5 @@
-# Crane Inspection
+# Crane Inspection v1.7 — Master Management Crane Files
 
-Production GitHub Pages build for the Tower Crane Inspection PWA.
+Management now has a Crane File view with Overview, Inspection History, Photos, and Assignment History. This build assumes the existing Supabase schema and permissions are already working.
 
-## Workspaces
-- **Operator / Technician:** assigned crane inspection, dates, checklist, remarks, photos, signature, and save.
-- **Executive / Management:** fleet, operators, assignments, inspections, reports, photos, and management review.
-
-## Login behavior
-An account with `role = executive` can enter **both** the Executive/Management workspace and the Operator Inspection workspace. An account with `role = operator` is restricted to the Operator workspace.
-
-## Supabase
-The browser uses the publishable Supabase key from `config.js`. Never place a service-role key in this repository.
+Replace `executive.html` in GitHub Pages. No new SQL migration is required for the Crane File UI.
