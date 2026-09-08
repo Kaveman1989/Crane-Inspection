@@ -1,4 +1,4 @@
-/* Shared Supabase authentication helper for Crane Inspection 1.3. */
+/* Shared Supabase authentication helper for Crane Inspection 1.5.2. Executive accounts may also enter the Operator workspace. */
 (function(){
   const cfg = window.CRANE_CONFIG || {};
   window.craneAuthReady = !!(cfg.supabaseUrl && cfg.supabaseAnonKey && window.supabase);
@@ -8,7 +8,7 @@
     const {data:{session}} = await window.craneSupabase.auth.getSession();
     if(!session){ location.href='./index.html'; return null; }
     const {data:profile,error} = await window.craneSupabase.from('profiles').select('*').eq('id',session.user.id).single();
-    if(error || !profile || !profile.active || profile.role !== role){ alert('This account does not have access to this area.'); await window.craneSupabase.auth.signOut(); location.href='./index.html'; return null; }
+    const allowed = profile && profile.active && (role === 'operator' ? (profile.role === 'operator' || profile.role === 'executive') : profile.role === role); if(error || !allowed){ alert('This account does not have access to this area.'); await window.craneSupabase.auth.signOut(); location.href='./index.html'; return null; }
     return {demo:false,role:profile.role,user:session.user,profile:profile};
   };
   window.craneRequireAnyRole = async function(roles){
