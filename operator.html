@@ -309,9 +309,10 @@
     </div>
   </div>
 
+  <button type="button" id="saveInspectionBtn" class="tag-btn amber" style="width:100%;margin-top:4px;">💾 Save Inspection</button>
   <p class="save-status" id="saveStatus"></p>
   </div>
-  <p class="footnote">Entries save automatically as you go, organized by date — use the calendar above to revisit any day.</p>
+  <p class="footnote">Entries save automatically as you go, organized by date — tap Save Inspection anytime to sync immediately, and use the calendar above to revisit any day.</p>
 
   <div class="confirm-overlay" id="confirmOverlay" hidden>
     <div class="confirm-box">
@@ -711,8 +712,9 @@
   }
 
   /* ---------- static listeners ---------- */
+  function on(id, evt, fn){ var el = document.getElementById(id); if(el) el.addEventListener(evt, fn); }
   function bindStaticListeners(){
-    document.getElementById("checklist").addEventListener("click", function(e){
+    on("checklist", "click", function(e){
       var btn = e.target.closest(".check-box");
       if(!btn) return;
       var i = parseInt(btn.dataset.item, 10);
@@ -725,40 +727,40 @@
       queueSave();
     });
 
-    document.getElementById("checkAllBtn").addEventListener("click", function(){
+    on("checkAllBtn", "click", function(){
       var d = draft.days[selectedDate];
       for(var i=0;i<ITEMS.length;i++) d.checks[i] = "ok";
       renderChecklist(); renderCalendar(); queueSave();
     });
-    document.getElementById("clearDayBtn").addEventListener("click", function(){
+    on("clearDayBtn", "click", function(){
       showConfirm("Clear every check mark for " + shortLabel(selectedDate) + "? This can't be undone.", function(){
         draft.days[selectedDate].checks = {};
         renderChecklist(); renderCalendar(); queueSave();
       });
     });
-    document.getElementById("confirmCancel").addEventListener("click", hideConfirm);
-    document.getElementById("confirmOk").addEventListener("click", function(){
+    on("confirmCancel", "click", hideConfirm);
+    on("confirmOk", "click", function(){
       var cb = confirmCallback;
       hideConfirm();
       if(cb) cb();
     });
 
-    document.getElementById("prevDayBtn").addEventListener("click", function(){ selectDate(addDays(selectedDate, -1)); });
-    document.getElementById("nextDayBtn").addEventListener("click", function(){ selectDate(addDays(selectedDate, 1)); });
-    document.getElementById("todayBtn").addEventListener("click", function(){ selectDate(todayKey()); });
-    document.getElementById("dateToggle").addEventListener("click", function(){
+    on("prevDayBtn", "click", function(){ selectDate(addDays(selectedDate, -1)); });
+    on("nextDayBtn", "click", function(){ selectDate(addDays(selectedDate, 1)); });
+    on("todayBtn", "click", function(){ selectDate(todayKey()); });
+    on("dateToggle", "click", function(){
       var cal = document.getElementById("calCard");
-      cal.hidden = !cal.hidden;
+      if(cal) cal.hidden = !cal.hidden;
     });
-    document.getElementById("calPrevMonth").addEventListener("click", function(){
+    on("calPrevMonth", "click", function(){
       calendarMonth--; if(calendarMonth < 0){ calendarMonth = 11; calendarYear--; }
       renderCalendar();
     });
-    document.getElementById("calNextMonth").addEventListener("click", function(){
+    on("calNextMonth", "click", function(){
       calendarMonth++; if(calendarMonth > 11){ calendarMonth = 0; calendarYear++; }
       renderCalendar();
     });
-    document.getElementById("calGrid").addEventListener("click", function(e){
+    on("calGrid", "click", function(e){
       var btn = e.target.closest(".cal-cell");
       if(!btn || !btn.dataset.datekey) return;
       selectDate(btn.dataset.datekey);
@@ -775,18 +777,18 @@
       });
     }
 
-    document.getElementById("remarks").addEventListener("input", function(e){
+    on("remarks", "input", function(e){
       draft.days[selectedDate].remarks = e.target.value; queueSave();
     });
-    document.getElementById("dailyInitials").addEventListener("input", function(e){
+    on("dailyInitials", "input", function(e){
       draft.days[selectedDate].initials = e.target.value; queueSave();
     });
-    document.getElementById("operatorName").addEventListener("input", function(e){
+    on("operatorName", "input", function(e){
       draft.days[selectedDate].operatorName = e.target.value;
       draft.lastOperatorName = e.target.value;
       queueSave();
     });
-    document.getElementById("saveInspectionBtn").addEventListener("click", function(){ saveNow(); });
+    on("saveInspectionBtn", "click", function(){ saveNow(); });
   }
 
 
