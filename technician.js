@@ -10,7 +10,7 @@
     'potain-mr-130':'https://www.manitowoc.com/manuals',
     'potain-mdt-219':'https://www.manitowoc.com/potain/top-slewing-cranes'
   };
-  let auth=null,cloud=null,cranes=[],models=[],documents=[],parts=[],requests=[],selectedCraneId='',modelKey='',basket=[];
+  let auth=null,cloud=null,cranes=[],models=[],documents=[],parts=[],requests=[],selectedCraneId='',modelKey='',basket=[],partsSearchVersion=0,partsSearchTimer=null;
 
   async function init(){
     try{
@@ -21,7 +21,14 @@
       $('refreshBtn').onclick=()=>location.reload();
       $('craneSearch').addEventListener('input',renderCraneList);
       $('craneFilter').addEventListener('change',event=>selectCrane(event.target.value));
-      $('partSearch').addEventListener('input',renderParts);
+      $('partSearch').addEventListener('input',()=>{clearTimeout(partsSearchTimer);partsSearchTimer=setTimeout(loadParts,250)});
+      const modelMessage=document.createElement('span');
+      modelMessage.id='modelMessage';
+      modelMessage.className='muted';
+      $('partSearch').insertAdjacentElement('afterend',modelMessage);
+      $('searchAllModels').addEventListener('change',loadParts);
+      $('systemFilter').addEventListener('change',renderParts);
+      $('fitmentFilter').addEventListener('change',renderParts);
       $('addFreePart').onclick=addFreePart;
       $('submitRequest').onclick=submitRequest;
       if(cloud){
@@ -72,6 +79,7 @@
     const crane=cranes.find(item=>item.id===craneId);
     if(!crane)return;
     selectedCraneId=crane.id;modelKey='';documents=[];parts=[];basket=[];
+    $('partSearch').value='';$('searchAllModels').checked=false;$('systemFilter').value='';$('fitmentFilter').value='any';$('partsSearchStatus').textContent='';
     $('emptyLookup').classList.add('hidden');$('craneDetails').classList.remove('hidden');
     $('craneTitle').textContent=(crane.make||'Crane')+' '+(crane.model||'');
     $('craneIdentity').innerHTML=[['Serial',crane.serial],['Project',crane.project],['Owner',crane.owner],['Lessee',crane.lessee],['Site',crane.site_address]].map(([label,value])=>`<div class="datum"><span>${label}</span><b>${escapeHtml(value||'Not recorded')}</b></div>`).join('');
@@ -116,33 +124,91 @@
   function safeHttpUrl(value){try{const url=new URL(value);return ['https:','http:'].includes(url.protocol)?url.href:''}catch{return''}}
 
   async function loadParts(){
-    if(!modelKey){$('parts').innerHTML='<div class="empty">Parts catalog lookup is unavailable until the model identity is matched.</div>';return}
-    if(!cloud){$('parts').innerHTML='<div class="empty">No parts are seeded in demo mode. Use a typed item to demonstrate a request.</div>';return}
-    $('parts').innerHTML='<div class="empty">Loading parts…</div>';
-    const {data,error}=await cloud.from('crane_parts_catalog').select('*').eq('model_key',modelKey).eq('active',true).order('system_name').order('part_number');
-    if(error)throw error;
-    parts=data||[];renderParts();
+    const searchVersion=++partsSearchVersion;
+    if(!modelKey){parts=[];$('partsSearchStatus').textContent='';renderParts();return}
+    if(!cloud){parts=[];$('partsSearchStatus').textContent='Demo mode has no imported parts data.';renderParts();return}
+    const rawQuery=$('partSearch').value.trim().replace(/[%_(),\\]/g,'').slice(0,80);
+    const searchAllModels=$('searchAllModels').checked;
+    $('partsSearchStatus').textContent=rawQuery?'Searching the parts catalog…':'Loading model catalog…';
+    try{
+      const fields=['part_number','description','system_name','source_reference'];
+      let results=[];
+      if(rawQuery){
+        const searches=fields.map(field=>{
+          let query=cloud.from('crane_parts_catalog').select('*').eq('active',true).ilike(field,'%'+rawQuery+'%').order('part_number').limit(30);
+          if(!searchAllModels)query=query.eq('model_key',modelKey);
+          return query;
+        });
+        const exactPartNumber=cloud.from('crane_parts_catalog').select('*').eq('active',true).ilike('part_number',rawQuery).limit(10);
+        const partNumberPrefix=cloud.from('crane_parts_catalog').select('*').eq('active',true).ilike('part_number',rawQuery+'%').order('part_number').limit(20);
+        searches.push(searchAllModels?exactPartNumber:exactPartNumber.eq('model_key',modelKey));
+        searches.push(searchAllModels?partNumberPrefix:partNumberPrefix.eq('model_key',modelKey));
+          $('partsSearchStatus').textContent=parts.length?`Found ${parts.length} catalog candidate${parts.length===1?'':'s'}. ${searchAllModels?'Other-model hits need fitment confirmation.':'Results are limited to this crane model.'}`:'No indexed catalog records match. Try a broader term or search other models.';
+        if(searchAllModels){
+          const matchingModels=models.filter(model=>normalize(model.model_name).includes(normalize(rawQuery))||normalize(model.manufacturer+' '+model.model_name).includes(normalize(rawQuery))).map(model=>model.model_key);
+          if(matchingModels.length)searches.push(cloud.from('crane_parts_catalog').select('*').eq('active',true).in('model_key',matchingModels).order('part_number').limit(30));
+        }
+        const responses=await Promise.all(searches);
+        const failed=responses.find(response=>response.error);
+        if(failed)throw failed.error;
+        results=responses.flatMap(response=>response.data||[]);
+      }else{
+        let query=cloud.from('crane_parts_catalog').select('*').eq('active',true).order('model_key').order('system_name').order('part_number').limit(60);
+        if(!searchAllModels)query=query.eq('model_key',modelKey);
+        const {data,error}=await query;
+        if(error)throw error;
+        results=data||[];
+      }
+      if(searchVersion!==partsSearchVersion)return;
+      parts=[...new Map(results.map(part=>[part.id,part])).values()];
+      $('partsSearchStatus').textContent=parts.length?(searchAllModels?'Searching all model catalogs; other-model hits are candidates only.':'Showing model catalog matches.'):'No indexed catalog records match. Try a broader term or search other models.';
+      renderParts();
+    }catch(error){
+      if(searchVersion!==partsSearchVersion)return;
+      parts=[];$('partsSearchStatus').textContent='Parts search failed: '+(error.message||error);renderParts();
+    }
   }
 
-  function partVerifiedForSelectedCrane(part){
+  function partFitment(part){
+    if(part.model_key!==modelKey)return'other-model';
     const crane=cranes.find(item=>item.id===selectedCraneId);
     const serials=Array.isArray(part.applicable_serials)?part.applicable_serials:[];
-    return part.fitment_status==='verified'&&(serials.includes('*')||!!crane?.serial&&serials.includes(crane.serial));
+    return part.fitment_status==='verified'&&(serials.includes('*')||!!crane?.serial&&serials.includes(crane.serial))?'verified':'review';
   }
 
   function renderParts(){
-      $('parts').innerHTML=matched.length?matched.map(part=>{const verified=partVerifiedForSelectedCrane(part);return `<div class="part"><div class="part-row"><div><strong>${escapeHtml(part.part_number)}</strong> ${part.system_name?`<span class="muted">· ${escapeHtml(part.system_name)}</span>`:''}<div>${escapeHtml(part.description)}</div><span class="badge ${verified?'verified':'pending'}">${verified?'Verified for this serial':'Unverified for this crane'}</span>${part.serial_range?`<span class="badge">${escapeHtml(part.serial_range)}</span>`:''}${part.source_reference?`<div class="muted">Source: ${escapeHtml(part.source_reference)}</div>`:''}</div><button type="button" data-add-part="${escapeHtml(part.id)}">Add to request</button></div></div>`}).join(''):'<div class="empty">No parts match. Add a typed request item for manager verification.</div>';
-      const verified=partVerifiedForSelectedCrane(part);
-      basket.push({catalog_part_id:verified?part.id:null,part_number:part.part_number,description:part.description,quantity:1,notes:verified?'':'Catalog fitment is unverified for this crane; confirm against the serial-specific parts book.'});
+    const system=$('systemFilter').value;
+    const fitment=$('fitmentFilter').value;
+    const systems=[...new Set(parts.map(part=>part.system_name).filter(Boolean))].sort((left,right)=>left.localeCompare(right));
+    const selectedSystem=systems.includes(system)?system:'';
+    $('systemFilter').innerHTML='<option value="">All systems</option>'+systems.map(value=>`<option value="${escapeHtml(value)}">${escapeHtml(value)}</option>`).join('');
+    $('systemFilter').value=selectedSystem;
+    const matched=parts.filter(part=>(!selectedSystem||part.system_name===selectedSystem)&&(fitment==='any'||partFitment(part)===fitment));
     const query=normalize($('partSearch').value);
-    const matched=parts.filter(part=>!query||[part.part_number,part.description,part.system_name,part.serial_range].some(value=>normalize(value).includes(query)));
-    $('parts').innerHTML=matched.length?matched.map(part=>`<div class="part"><div class="part-row"><div><strong>${escapeHtml(part.part_number)}</strong> ${part.system_name?`<span class="muted">· ${escapeHtml(part.system_name)}</span>`:''}<div>${escapeHtml(part.description)}</div><span class="badge ${part.fitment_status==='verified'?'verified':'pending'}">${part.fitment_status==='verified'?'Verified fitment':'Unverified fitment'}</span>${part.serial_range?`<span class="badge">${escapeHtml(part.serial_range)}</span>`:''}${part.source_reference?`<div class="muted">Source: ${escapeHtml(part.source_reference)}</div>`:''}</div><button type="button" data-add-part="${escapeHtml(part.id)}">Add to request</button></div></div>`).join(''):'<div class="empty">No parts match. Add a typed request item for manager verification.</div>';
+    const searchRank=part=>{
+      if(!query)return 0;
+      const number=normalize(part.part_number),description=normalize(part.description),systemName=normalize(part.system_name);
+      if(number===query)return 0;
+      if(number.startsWith(query))return 1;
+      if(description.startsWith(query)||systemName.startsWith(query))return 2;
+      return 3;
+    };
+    const fitmentRank={verified:0,review:1,'other-model':2};
+    matched.sort((left,right)=>searchRank(left)-searchRank(right)||fitmentRank[partFitment(left)]-fitmentRank[partFitment(right)]||left.part_number.localeCompare(right.part_number));
+    const modelName=part=>models.find(model=>model.model_key===part.model_key)?.model_name||part.model_key;
+    const emptyResults='<div class="empty">No indexed parts match these filters.</div><p class="muted">Check the manufacturer’s parts resources or use the crane’s serial-specific parts book: <a href="https://www.manitowoc.com/parts" target="_blank" rel="noopener noreferrer">Manitowoc parts and services</a> · <a href="https://www.manitowocdirect.com/Authentication/Login" target="_blank" rel="noopener noreferrer">Manitowoc Direct</a>. Parts found outside this catalog still need exact model and serial verification.</p>';
+    $('parts').innerHTML=matched.length?matched.map(part=>{
+      const partFitmentStatus=partFitment(part);
+      const label=partFitmentStatus==='verified'?'Verified for this serial':partFitmentStatus==='review'?'Confirm serial applicability':'Other model; fitment not confirmed';
+      return `<div class="part"><div class="part-row"><div><strong>${escapeHtml(part.part_number||'No part number')}</strong> ${part.system_name?`<span class="muted">· ${escapeHtml(part.system_name)}</span>`:''}<div>${escapeHtml(part.description)}</div><span class="badge ${partFitmentStatus==='verified'?'verified':'pending'}">${label}</span><span class="badge">${escapeHtml(modelName(part))}</span>${part.serial_range?`<span class="badge">Serial range: ${escapeHtml(part.serial_range)}</span>`:''}${part.source_reference?`<div class="muted">Source: ${escapeHtml(part.source_reference)}</div>`:''}</div><button type="button" data-add-part="${escapeHtml(part.id)}">${partFitmentStatus==='verified'?'Add to request':'Request verification'}</button></div></div>`;
+    }).join(''):emptyResults;
     $('parts').querySelectorAll('[data-add-part]').forEach(button=>button.addEventListener('click',()=>addCatalogPart(button.dataset.addPart)));
   }
 
   function addCatalogPart(partId){
     const part=parts.find(item=>item.id===partId);if(!part)return;
-    basket.push({catalog_part_id:part.fitment_status==='verified'?part.id:null,part_number:part.part_number,description:part.description,quantity:1,notes:part.fitment_status==='verified'?'':'Catalog fitment is unverified; confirm against serial-specific parts book.'});
+    const verified=partFitment(part)==='verified';
+    basket.push({catalog_part_id:verified?part.id:null,part_number:part.part_number,description:part.description,quantity:1,notes:verified?'':'Catalog candidate only; confirm exact model and serial-specific fitment before ordering.'});
     renderBasket();
   }
 
