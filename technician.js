@@ -101,19 +101,23 @@
   }
 
   async function loadDocuments(){
-    if(!modelKey){$('documents').innerHTML='<div class="empty">No model-specific documents are matched. Use the manufacturer portal and verify the serial-specific manual.</div>';return}
+    const crane=cranes.find(item=>item.id===selectedCraneId);
+    const isPotain=normalize(crane?.make)==='potain';
+    const documentModelKeys=[modelKey,...(isPotain?['potain-all-models']:[])].filter(Boolean);
+    if(!documentModelKeys.length){$('documents').innerHTML='<div class="empty">No manufacturer reference is configured for this crane make.</div>';return}
     if(!cloud){
-      const model=productReferences[modelKey];
-      $('documents').innerHTML=`<div class="doc"><div class="doc-title">Manufacturer product/reference page</div><span class="badge">Reference only</span><p class="muted">Product literature is not a serial-specific service or parts manual.</p><a href="${model}" target="_blank" rel="noopener noreferrer">Open official Potain reference</a></div>`;
+      const modelUrl=productReferences[modelKey];
+      const links=[...(modelUrl?[{title:'Model product/reference page',url:modelUrl}]:[]),...(isPotain?[{title:'All Potain models — manuals portal',url:'https://www.manitowoc.com/manuals'}]:[])];
+      $('documents').innerHTML=links.map(link=>`<div class="doc"><div class="doc-title">${escapeHtml(link.title)}</div><span class="badge">Reference only</span><p class="muted">Use the crane’s serial-specific manufacturer manual for operation, maintenance, and parts.</p><a href="${link.url}" target="_blank" rel="noopener noreferrer">Open official Potain resource</a></div>`).join('');
       return;
     }
     $('documents').innerHTML='<div class="empty">Loading references…</div>';
-    const {data,error}=await cloud.from('crane_reference_documents').select('*').eq('model_key',modelKey).order('document_type').order('title');
+    const {data,error}=await cloud.from('crane_reference_documents').select('*').in('model_key',documentModelKeys).order('document_type').order('title');
     if(error)throw error;
     documents=data||[];
-    if(!documents.length){$('documents').innerHTML=`<div class="doc"><div class="doc-title">No documents registered for this model</div><span class="badge pending">Awaiting verified source</span><p class="muted">Manufacturer reference page: <a href="${productReferences[modelKey]||'https://www.manitowoc.com/manuals'}" target="_blank" rel="noopener noreferrer">Open Potain source</a>. Ask management to add the correct revision and serial range after verification.</p></div>`;return}
+    if(!documents.length){const url=productReferences[modelKey]||'https://www.manitowoc.com/manuals';$('documents').innerHTML=`<div class="doc"><div class="doc-title">No serial-specific documents registered yet</div><span class="badge pending">Verify model and serial</span><p class="muted">Use the manufacturer portal to find the current instructions and parts documents.</p><a href="${url}" target="_blank" rel="noopener noreferrer">Open Manitowoc manuals portal</a></div>`;return}
     const links=await Promise.all(documents.map(async doc=>({doc,url:await documentUrl(doc)})));
-    $('documents').innerHTML=links.map(({doc,url})=>`<div class="doc"><div class="doc-title">${escapeHtml(doc.title)}</div><span class="badge">${escapeHtml(doc.document_type.replaceAll('_',' '))}</span><span class="badge ${doc.verification_status==='serial_specific'?'verified':'pending'}">${escapeHtml(doc.verification_status.replaceAll('_',' '))}</span>${doc.revision?`<span class="badge">Rev ${escapeHtml(doc.revision)}</span>`:''}${doc.serial_range?`<p class="muted">Serial range: ${escapeHtml(doc.serial_range)}</p>`:''}${doc.notes?`<p class="muted">${escapeHtml(doc.notes)}</p>`:''}${url?`<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">Open document</a>`:'<span class="muted">Document link unavailable.</span>'}</div>`).join('');
+    $('documents').innerHTML=links.map(({doc,url})=>`<div class="doc"><div class="doc-title">${escapeHtml(doc.title)}</div><span class="badge">${escapeHtml(doc.model_key==='potain-all-models'?'All Potain models':doc.document_type.replaceAll('_',' '))}</span><span class="badge ${doc.verification_status==='serial_specific'?'verified':'pending'}">${escapeHtml(doc.verification_status.replaceAll('_',' '))}</span>${doc.revision?`<span class="badge">Rev ${escapeHtml(doc.revision)}</span>`:''}${doc.serial_range?`<p class="muted">Serial range: ${escapeHtml(doc.serial_range)}</p>`:''}${doc.notes?`<p class="muted">${escapeHtml(doc.notes)}</p>`:''}${url?`<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">Open document</a>`:'<span class="muted">Document link unavailable.</span>'}</div>`).join('');
   }
 
   async function documentUrl(doc){
@@ -125,10 +129,10 @@
 
   async function loadParts(){
     const searchVersion=++partsSearchVersion;
-    if(!modelKey){parts=[];$('partsSearchStatus').textContent='';renderParts();return}
+    const searchAllModels=$('searchAllModels').checked;
+    if(!modelKey&&!searchAllModels){parts=[];$('partsSearchStatus').textContent='This crane model is not mapped. Enable “Search other models” to view unverified catalog candidates.';renderParts();return}
     if(!cloud){parts=[];$('partsSearchStatus').textContent='Demo mode has no imported parts data.';renderParts();return}
     const rawQuery=$('partSearch').value.trim().replace(/[%_(),\\]/g,'').slice(0,80);
-    const searchAllModels=$('searchAllModels').checked;
     $('partsSearchStatus').textContent=rawQuery?'Searching the parts catalog…':'Loading model catalog…';
     try{
       const fields=['part_number','description','system_name','source_reference'];
@@ -143,8 +147,8 @@
         const partNumberPrefix=cloud.from('crane_parts_catalog').select('*').eq('active',true).ilike('part_number',rawQuery+'%').order('part_number').limit(20);
         searches.push(searchAllModels?exactPartNumber:exactPartNumber.eq('model_key',modelKey));
         searches.push(searchAllModels?partNumberPrefix:partNumberPrefix.eq('model_key',modelKey));
-          $('partsSearchStatus').textContent=parts.length?`Found ${parts.length} catalog candidate${parts.length===1?'':'s'}. ${searchAllModels?'Other-model hits need fitment confirmation.':'Results are limited to this crane model.'}`:'No indexed catalog records match. Try a broader term or search other models.';
         if(searchAllModels){
+            $('partsSearchStatus').textContent=parts.length?`Found ${parts.length} catalog candidate${parts.length===1?'':'s'}. ${searchAllModels?'Other-model hits need fitment confirmation.':'Results are limited to this crane model.'}`:'No indexed catalog records match. Try a broader term or search other models.';
           const matchingModels=models.filter(model=>normalize(model.model_name).includes(normalize(rawQuery))||normalize(model.manufacturer+' '+model.model_name).includes(normalize(rawQuery))).map(model=>model.model_key);
           if(matchingModels.length)searches.push(cloud.from('crane_parts_catalog').select('*').eq('active',true).in('model_key',matchingModels).order('part_number').limit(30));
         }

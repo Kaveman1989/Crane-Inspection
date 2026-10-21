@@ -37,3 +37,9 @@ The technician workspace adds active-fleet search, model-based references, a par
 5. Maintain model-specific parts in `crane_parts_catalog`. Mark `fitment_status` as `verified` only when supported by the correct serial/configuration-specific parts source. Add the exact crane serial to `applicable_serials`, or use `*` only when the source confirms the part fits all serials for that model. Technicians can submit typed requests without a part number; those request lines are explicitly unverified.
 
 Parts requests are created through `create_parts_request`, which verifies the active crane and, when a catalog item is selected, the model fitment and catalog values. The technician app cannot edit fleet, document, or catalog records. Managers can review requests and maintain catalog/storage records in Supabase. Keep using the crane's serial-specific manufacturer instructions for maintenance and repair decisions.
+
+### Shared Potain Manuals Link
+
+After migration 2.1 has run, run `supabase-2.2-potain-shared-manuals-migration.sql` once in the Supabase SQL Editor. It creates one shared Potain reference entry pointing to the [Manitowoc Manuals Portal](https://www.manitowoc.com/manuals), and the technician workspace shows it for every Potain crane, even when that exact model is not in the local model catalog. This avoids adding the portal link separately for each crane. Deploy the updated `technician.js` and `sw.js` with it.
+
+The shared entry is a portal link, not a copy of all Potain manuals. The portal may require its own access and model/serial selection. Add actual serial-specific PDFs to the private Storage bucket and register those documents individually when you have the authorized files and verified revision/serial coverage.
