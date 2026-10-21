@@ -1,3 +1,4 @@
+The technician workspace adds active-fleet search, model-based references, a parts catalog, and parts requests. It recognizes Potain Igo T 85 A, Igo T 130, MR 130, and MDT 219 labels. MR 130 and MDT 219 require nameplate/configuration confirmation. The migration seeds only official product/reference links; it does not seed parts numbers or claim the public PDFs are serial-specific service manuals. The `Search Manitowoc parts` button opens `www.parts.manitowoc.com` in a new tab with the entered part reference or current search prefilled. Manitowoc's portal primarily searches by part reference; a description-only query may not return a match.
 # Crane Inspection — Master Management v1.8
 
 This package is the current full production web/PWA package.

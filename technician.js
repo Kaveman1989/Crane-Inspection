@@ -26,6 +26,14 @@
       modelMessage.id='modelMessage';
       modelMessage.className='muted';
       $('partSearch').insertAdjacentElement('afterend',modelMessage);
+      const manitowocSearchButton=document.createElement('button');
+      manitowocSearchButton.type='button';
+      manitowocSearchButton.id='manitowocPartsSearch';
+      manitowocSearchButton.className='button';
+      manitowocSearchButton.textContent='Search Manitowoc parts';
+      manitowocSearchButton.title='Open Manitowoc Potain parts search in a new tab';
+      manitowocSearchButton.onclick=()=>searchManitowocParts();
+      modelMessage.insertAdjacentElement('afterend',manitowocSearchButton);
       $('searchAllModels').addEventListener('change',loadParts);
       $('systemFilter').addEventListener('change',renderParts);
       $('fitmentFilter').addEventListener('change',renderParts);
@@ -126,6 +134,16 @@
   }
 
   function safeHttpUrl(value){try{const url=new URL(value);return ['https:','http:'].includes(url.protocol)?url.href:''}catch{return''}}
+
+  function searchManitowocParts(reference){
+    const searchTerm=String(reference||$('freePartNumber').value.trim()||$('partSearch').value.trim()).trim();
+    if(!searchTerm){$('partsSearchStatus').textContent='Enter a part reference or search term before opening Manitowoc parts search.';$('freePartNumber').focus();return}
+    const url=new URL('https://www.parts.manitowoc.com/Search/Simple');
+    url.searchParams.set('RestrictToCategoryId','6');
+    url.searchParams.set('SearchTerm',searchTerm);
+    window.open(url.toString(),'_blank','noopener,noreferrer');
+    $('partsSearchStatus').textContent='Opened Manitowoc Potain parts search in a new tab. The portal primarily searches part references.';
+  }
 
   async function loadParts(){
     const searchVersion=++partsSearchVersion;
