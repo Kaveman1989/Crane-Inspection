@@ -38,9 +38,16 @@ The technician workspace adds active-fleet search, model-based references, a par
 5. Maintain model-specific parts in `crane_parts_catalog`. Mark `fitment_status` as `verified` only when supported by the correct serial/configuration-specific parts source. Add the exact crane serial to `applicable_serials`, or use `*` only when the source confirms the part fits all serials for that model. Technicians can submit typed requests without a part number; those request lines are explicitly unverified.
 
 Parts requests are created through `create_parts_request`, which verifies the active crane and, when a catalog item is selected, the model fitment and catalog values. The technician app cannot edit fleet, document, or catalog records. Managers can review requests and maintain catalog/storage records in Supabase. Keep using the crane's serial-specific manufacturer instructions for maintenance and repair decisions.
+The executive dashboard now has a separate Parts Requests panel backed by the `parts_requests` and `parts_request_items` tables from migration 2.1. Managers can review submitted lines and update procurement status without mixing purchase requests into the inspection deficiency action register. No additional database migration is needed for this dashboard change; deploy the updated `executive.html`.
 
 ### Shared Potain Manuals Link
 
 After migration 2.1 has run, run `supabase-2.2-potain-shared-manuals-migration.sql` once in the Supabase SQL Editor. It creates one shared Potain reference entry pointing to the [Manitowoc Manuals Portal](https://www.manitowoc.com/manuals), and the technician workspace shows it for every Potain crane, even when that exact model is not in the local model catalog. This avoids adding the portal link separately for each crane. Deploy the updated `technician.js` and `sw.js` with it.
 
 The shared entry is a portal link, not a copy of all Potain manuals. The portal may require its own access and model/serial selection. Add actual serial-specific PDFs to the private Storage bucket and register those documents individually when you have the authorized files and verified revision/serial coverage.
+
+### Technician History and Video v2.3
+
+After 2.1 and 2.2 have run, run `supabase-2.3-technician-media-history-migration.sql`. It adds a status audit trail for parts requests, read-only technician policies for active-crane inspections/media/parts history, enables common video MIME types in the existing private `inspection-photos` bucket, and allows up to 100 MB per media file. It also removes parts requests and their history if a manager permanently deletes the crane.
+
+Deploy `operator.html`, `operator-cloud.js`, `executive.html`, `technician.html`, `technician.js`, and `sw.js`. Operators can upload images up to 20 MB and videos up to 100 MB from an inspection date. Technicians receive read-only access to inspection history, images, videos, and parts-request events for active cranes. Media remains linked through the existing `inspection_photos` table, so existing photos are retained.

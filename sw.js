@@ -1,4 +1,4 @@
-const CACHE = "crane-inspection-v2.2";
+const CACHE = "crane-inspection-v2.3";
 const CACHE = "crane-inspection-v2.1";
 const ASSETS = ["./", "./index.html", "./operator.html", "./executive.html", "./technician.html", "./technician.js", "./manifest.json", "./icon.svg", "./config.js", "./auth.js", "./operator-cloud.js"];
 self.addEventListener("install", event => { event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(ASSETS).catch(()=>{}))); self.skipWaiting(); });

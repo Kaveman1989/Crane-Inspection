@@ -286,14 +286,14 @@
   </div>
 
   <div class="card">
-    <h2 class="card-title">Inspection Photos <span class="date-tag" id="photoDateTag"></span></h2>
+    <h2 class="card-title">Inspection Media <span class="date-tag" id="photoDateTag"></span></h2>
     <div class="toolbar">
-      <button type="button" id="takePhotoBtn" class="tag-btn amber">📷 Take Photo</button>
-      <button type="button" id="choosePhotoBtn" class="tag-btn ghost">Choose Photo</button>
+      <button type="button" id="takePhotoBtn" class="tag-btn amber">Capture Photo / Video</button>
+      <button type="button" id="choosePhotoBtn" class="tag-btn ghost">Choose Photo / Video</button>
     </div>
-    <input id="photoInput" type="file" accept="image/*" capture="environment" hidden>
+    <input id="photoInput" type="file" accept="image/*,video/*" capture="environment" hidden>
     <div id="photoPreview" class="photo-preview"></div>
-    <p class="footnote" style="text-align:left;padding:0;margin:8px 0 0;">Photos are attached to this inspection date and available to Management.</p>
+    <p class="footnote" style="text-align:left;padding:0;margin:8px 0 0;">Photos and videos are attached to this inspection date and available to Management and authorized technicians.</p>
     <div id="photoStatus" class="save-status"></div>
   </div>
 
@@ -802,10 +802,12 @@
       var file=input.files&&input.files[0]; if(!file)return;
       var st=document.getElementById("photoStatus"), preview=document.getElementById("photoPreview");
       if(preview){ preview.innerHTML="<img alt=\"Selected inspection photo\" style=\"width:100%;max-height:240px;object-fit:contain;border-radius:10px;border:1px solid var(--line);background:#fff;\">"; var img=preview.querySelector("img"); img.src=URL.createObjectURL(file); }
-      st.textContent="Saving photo…";
+      var isVideo=/^video\//.test(file.type);
+      if(preview){ preview.innerHTML=isVideo?"<video controls playsinline style=\"width:100%;max-height:320px;border-radius:10px;border:1px solid var(--line);background:#000;\"></video>":"<img alt=\"Selected inspection photo\" style=\"width:100%;max-height:240px;object-fit:contain;border-radius:10px;border:1px solid var(--line);background:#fff;\">"; var media=preview.querySelector(isVideo?"video":"img"); media.src=URL.createObjectURL(file); }
+      st.textContent="Saving media…";
       var ctx=window.CRANE_OPERATOR_CONTEXT;
-      if(!ctx||!ctx.uploadPhoto){st.textContent="Photo upload unavailable";return;}
-      ctx.uploadPhoto(file,selectedDate).then(function(){st.textContent="Photo saved to this inspection.";input.value="";}).catch(function(e){console.error(e);st.textContent=e.message||"Photo upload failed";});
+      if(!ctx||!ctx.uploadMedia){st.textContent="Media upload unavailable";return;}
+      ctx.uploadMedia(file,selectedDate).then(function(){st.textContent=(isVideo?"Video":"Photo")+" saved to this inspection.";input.value="";}).catch(function(e){console.error(e);st.textContent=e.message||"Media upload failed";});
     });
   }
 

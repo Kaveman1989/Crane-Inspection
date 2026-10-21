@@ -50,21 +50,24 @@
         if(error){ console.error('Inspection save failed',error); const msg='Save failed: '+error.message; window.CRANE_LAST_SAVE_ERROR=msg; throw new Error(msg); }
         window.CRANE_LAST_SAVE_ERROR=''; return !!data;
       },
-      async uploadPhoto(file,date){
+      async uploadMedia(file,date){
         if(!this.cloud) return {demo:true};
-        if(!file) throw new Error('Choose an image first.');
-        if(!/^image\//.test(file.type)) throw new Error('Only image files are allowed.');
-        if(file.size>10*1024*1024) throw new Error('Image must be 10 MB or smaller.');
+        if(!file) throw new Error('Choose a photo or video first.');
+        const isImage=/^image\//.test(file.type),isVideo=/^video\//.test(file.type);
+        if(!isImage&&!isVideo) throw new Error('Only image and video files are allowed.');
+        const maxSize=isVideo?100*1024*1024:20*1024*1024;
+        if(file.size>maxSize) throw new Error((isVideo?'Video':'Image')+' must be '+(isVideo?'100':'20')+' MB or smaller.');
         const {data:ins,error:insErr}=await this.cloud.from('inspections').select('id').eq('crane_id',this.crane.id).eq('inspection_date',date).maybeSingle();
         if(insErr) throw insErr;
-        if(!ins) throw new Error('Save the inspection for this date before adding a photo.');
-        const ext=(file.name.split('.').pop()||'jpg').toLowerCase().replace(/[^a-z0-9]/g,'')||'jpg';
+        if(!ins) throw new Error('Save the inspection for this date before adding media.');
+        const fallbackExtension=isVideo?(file.type==='video/quicktime'?'mov':file.type==='video/webm'?'webm':'mp4'):'jpg';
+        const ext=(file.name.split('.').pop()||fallbackExtension).toLowerCase().replace(/[^a-z0-9]/g,'')||fallbackExtension;
         const path=this.auth.user.id+'/'+ins.id+'/'+Date.now()+'.'+ext;
         const {error:upErr}=await this.cloud.storage.from('inspection-photos').upload(path,file,{upsert:false,contentType:file.type});
         if(upErr) throw upErr;
-        const {data:photo,error:photoErr}=await this.cloud.from('inspection_photos').insert({inspection_id:ins.id,crane_id:this.crane.id,operator_id:this.auth.user.id,inspection_date:date,storage_path:path,file_name:file.name,mime_type:file.type}).select().single();
-        if(photoErr) throw photoErr;
-        return photo;
+        const {data:media,error:mediaErr}=await this.cloud.from('inspection_photos').insert({inspection_id:ins.id,crane_id:this.crane.id,operator_id:this.auth.user.id,inspection_date:date,storage_path:path,file_name:file.name,mime_type:file.type}).select().single();
+        if(mediaErr) throw mediaErr;
+        return media;
       }
     };
     injectOperatorBar(window.CRANE_OPERATOR_CONTEXT);

@@ -10,7 +10,7 @@
     'potain-mr-130':'https://www.manitowoc.com/manuals',
     'potain-mdt-219':'https://www.manitowoc.com/potain/top-slewing-cranes'
   };
-  let auth=null,cloud=null,cranes=[],models=[],documents=[],parts=[],requests=[],selectedCraneId='',modelKey='',basket=[],partsSearchVersion=0,partsSearchTimer=null;
+  let auth=null,cloud=null,cranes=[],models=[],documents=[],parts=[],requests=[],craneInspectionHistory=[],craneInspectionMedia=[],cranePartsHistory=[],selectedCraneId='',modelKey='',basket=[],partsSearchVersion=0,partsSearchTimer=null;
 
   async function init(){
     try{
@@ -86,7 +86,7 @@
   async function selectCrane(craneId){
     const crane=cranes.find(item=>item.id===craneId);
     if(!crane)return;
-    selectedCraneId=crane.id;modelKey='';documents=[];parts=[];basket=[];
+    selectedCraneId=crane.id;modelKey='';documents=[];parts=[];basket=[];craneInspectionHistory=[];craneInspectionMedia=[];cranePartsHistory=[];
     $('partSearch').value='';$('searchAllModels').checked=false;$('systemFilter').value='';$('fitmentFilter').value='any';$('partsSearchStatus').textContent='';
     $('emptyLookup').classList.add('hidden');$('craneDetails').classList.remove('hidden');
     $('craneTitle').textContent=(crane.make||'Crane')+' '+(crane.model||'');
@@ -103,7 +103,7 @@
     }
     renderCraneList();renderBasket();
     try{
-      await Promise.all([loadDocuments(),loadParts()]);
+      await Promise.all([loadDocuments(),loadParts(),loadCraneHistory()]);
       await renderMyRequests();
     }catch(error){$('appStatus').textContent='Crane lookup did not fully load: '+(error.message||error)}
   }
@@ -131,6 +131,51 @@
   async function documentUrl(doc){
     if(doc.storage_path){const {data,error}=await cloud.storage.from('technician-reference-files').createSignedUrl(doc.storage_path,1800);return error?'':data.signedUrl}
     return safeHttpUrl(doc.source_url);
+  }
+
+  async function fetchAllRows(queryFactory){
+    const rows=[];let offset=0;const pageSize=1000;
+    while(true){
+      const {data,error}=await queryFactory().range(offset,offset+pageSize-1);
+      if(error)throw error;
+      const page=data||[];rows.push(...page);
+      if(page.length<pageSize)return rows;
+      offset+=pageSize;
+    }
+  }
+
+  async function loadCraneHistory(){
+    if(!cloud){
+      $('craneHistoryStatus').textContent='Demo mode: live inspection records and uploaded media load after sign-in with Supabase.';
+      $('craneInspectionHistory').innerHTML='<div class="empty">No demo inspection history.</div>';
+      $('craneMedia').innerHTML='<div class="empty">No demo media.</div>';
+      $('cranePartsHistory').innerHTML='<div class="empty">No demo parts-request history.</div>';
+      return;
+    }
+    [craneInspectionHistory,craneInspectionMedia,cranePartsHistory]=await Promise.all([
+      fetchAllRows(()=>cloud.from('inspections').select('id,inspection_date,data,status,updated_at').eq('crane_id',selectedCraneId).order('inspection_date',{ascending:false})),
+      fetchAllRows(()=>cloud.from('inspection_photos').select('id,inspection_id,inspection_date,storage_path,file_name,mime_type,created_at').eq('crane_id',selectedCraneId).order('created_at',{ascending:false})),
+      fetchAllRows(()=>cloud.from('parts_request_history').select('id,request_id,actor_id,event_type,old_status,new_status,notes,created_at').eq('crane_id',selectedCraneId).order('created_at',{ascending:false}))
+    ]);
+    renderCraneHistory();
+  }
+
+  async function renderCraneHistory(){
+    const inspections=craneInspectionHistory;
+    $('craneHistoryStatus').textContent=`${inspections.length} inspection record(s) · ${craneInspectionMedia.length} photo/video file(s) · ${cranePartsHistory.length} parts-history event(s)`;
+    $('craneInspectionHistory').innerHTML=inspections.length?inspections.map(inspection=>{
+      const checks=inspection.data?.day?.checks||{},faults=Object.values(checks).filter(value=>value==='fault').length;
+      return `<div class="doc"><div class="doc-title">${escapeHtml(inspection.inspection_date)}</div><span class="badge">${escapeHtml(inspection.status)}</span><span class="badge">${Object.keys(checks).length}/29 checks</span><span class="badge ${faults?'pending':'verified'}">${faults} fault(s)</span></div>`;
+    }).join(''):'<div class="empty">No inspection history for this crane.</div>';
+    const mediaCards=await Promise.all(craneInspectionMedia.map(async media=>{
+      const {data,error}=await cloud.storage.from('inspection-photos').createSignedUrl(media.storage_path,1800);
+      if(error)return `<div class="doc"><div class="doc-title">${escapeHtml(media.file_name||'Media')}</div><p class="muted">Media unavailable.</p></div>`;
+      const url=escapeHtml(data.signedUrl),isVideo=(media.mime_type||'').startsWith('video/');
+      const preview=isVideo?`<video controls playsinline preload="metadata" src="${url}" style="width:100%;max-height:360px"></video>`:`<img src="${url}" alt="Crane inspection media" style="width:100%;max-height:360px;object-fit:contain">`;
+      return `<div class="doc">${preview}<div class="doc-title">${escapeHtml(media.file_name||'Inspection media')}</div><span class="badge">${isVideo?'Video':'Photo'}</span><span class="badge">${escapeHtml(media.inspection_date||'')}</span></div>`;
+    }));
+    $('craneMedia').innerHTML=mediaCards.length?mediaCards.join(''):'<div class="empty">No photos or videos uploaded for this crane.</div>';
+    $('cranePartsHistory').innerHTML=cranePartsHistory.length?cranePartsHistory.map(event=>`<div class="doc"><div class="doc-title">${escapeHtml(event.event_type.replaceAll('_',' '))}${event.old_status?`: ${escapeHtml(event.old_status)} → ${escapeHtml(event.new_status)}`:''}</div><span class="badge">${escapeHtml(new Date(event.created_at).toLocaleString())}</span>${event.notes?`<p class="muted">${escapeHtml(event.notes)}</p>`:''}</div>`).join(''):'<div class="empty">No parts-request history for this crane.</div>';
   }
 
   function safeHttpUrl(value){try{const url=new URL(value);return ['https:','http:'].includes(url.protocol)?url.href:''}catch{return''}}
