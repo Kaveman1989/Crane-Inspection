@@ -14,6 +14,7 @@
 
   async function init(){
     try{
+      setupSectionTabs();
       auth=await window.craneRequireRole('technician');
       if(!auth)return;
       cloud=window.craneAuthReady?window.craneSupabase:null;
@@ -66,6 +67,85 @@
       if(cranes.length)selectCrane(cranes[0].id);
       else $('appStatus').textContent='No active cranes are available to this account.';
     }catch(error){$('appStatus').textContent='Lookup failed: '+(error.message||error)}
+  }
+
+  function setupSectionTabs(){
+    const details=$('craneDetails');
+    const headings=Array.from(details.children).filter(element=>element.tagName==='H3');
+    if(!headings.length)return;
+    const labels={
+      history:'History & media',
+      references:'Reference documents',
+      catalog:'Parts catalog',
+      request:'Parts request',
+      requestHistory:'Request history'
+    };
+    const sectionByHeading={
+      'Crane history & media':'history',
+      'Parts request history':'requestHistory',
+      'Reference documents':'references',
+      'Parts catalog':'catalog',
+      'Parts request':'request',
+      'My recent requests':'requestHistory'
+    };
+    const navigation=document.createElement('nav');
+    navigation.className='tech-tabs';
+    navigation.setAttribute('aria-label','Crane detail sections');
+    navigation.setAttribute('role','tablist');
+    const panels=new Map();
+    for(const heading of headings){
+      const section=sectionByHeading[heading.textContent.trim()];
+      if(!section)continue;
+      let panel=panels.get(section);
+      if(!panel){
+        panel=document.createElement('section');
+        panel.className='tech-tab-panel';
+        panel.id='tech-tab-'+section;
+        panel.setAttribute('role','tabpanel');
+        panel.setAttribute('tabindex','0');
+        panels.set(section,panel);
+      }
+      details.insertBefore(panel,heading);
+      panel.append(heading);
+      let sibling=panel.nextSibling;
+      while(sibling&&!(sibling.nodeType===1&&(sibling.tagName==='H3'||sibling.classList.contains('page-note')))){
+        const next=sibling.nextSibling;
+        panel.append(sibling);
+        sibling=next;
+      }
+    }
+    const selectTab=section=>{
+      for(const button of navigation.querySelectorAll('[role="tab"]')){
+        const active=button.dataset.section===section;
+        button.setAttribute('aria-selected',String(active));
+        button.tabIndex=active?0:-1;
+      }
+      for(const [key,panel] of panels)panel.hidden=key!==section;
+    };
+    for(const [section,label] of Object.entries(labels)){
+      if(!panels.has(section))continue;
+      const button=document.createElement('button');
+      button.type='button';
+      button.id='tech-tab-button-'+section;
+      button.setAttribute('role','tab');
+      button.setAttribute('aria-controls','tech-tab-'+section);
+      button.dataset.section=section;
+      button.textContent=label;
+      button.addEventListener('click',()=>selectTab(section));
+      button.addEventListener('keydown',event=>{
+        if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;
+        event.preventDefault();
+        const buttons=Array.from(navigation.querySelectorAll('[role="tab"]'));
+        const current=buttons.indexOf(button);
+        const next=event.key==='Home'?0:event.key==='End'?buttons.length-1:(current+(event.key==='ArrowRight'?1:-1)+buttons.length)%buttons.length;
+        buttons[next].focus();
+        buttons[next].click();
+      });
+      navigation.append(button);
+    }
+    for(const [section,panel] of panels)panel.setAttribute('aria-labelledby','tech-tab-button-'+section);
+    details.insertBefore(navigation,panels.values().next().value);
+    selectTab('history');
   }
 
   function findModel(crane){

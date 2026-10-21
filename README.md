@@ -3,6 +3,8 @@ The technician workspace adds active-fleet search, model-based references, a par
 
 This package is the current full production web/PWA package.
 
+The executive dashboard groups its sections into Overview, Follow-ups, Inspections, Assignments, and Administration tabs. The technician workspace uses tabs for crane history/media, references, parts catalog, parts requests, and request history.
+
 ### Management changes
 - Crane File remains the primary place to work with a crane's history.
 - Photos were removed from the main management dashboard and remain inside each Crane File > Photos tab.
