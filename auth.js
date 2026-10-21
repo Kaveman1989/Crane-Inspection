@@ -7,6 +7,8 @@
   if(window.craneAuthReady){ window.craneSupabase = window.supabase.createClient(cfg.supabaseUrl, cfg.supabaseAnonKey); }
 
   function canInspect(p){ return !!(p && p.active && (p.can_inspect === true || p.role === 'operator' || p.role === 'executive' || p.role === 'manager')); }
+  function canInspect(p){ return !!(p && p.active && (p.can_inspect === true || p.role === 'operator' || p.role === 'executive' || p.role === 'manager')); }
+  function canTechnician(p){ return !!(p && p.active && (p.can_technician === true || p.can_manage === true || p.role === 'executive' || p.role === 'manager')); }
   function canManage(p){ return !!(p && p.active && (p.can_manage === true || p.role === 'executive' || p.role === 'manager')); }
 
   async function getContext(){
@@ -15,16 +17,16 @@
     if(!session) return null;
     const {data:profile,error} = await window.craneSupabase.from('profiles').select('*').eq('id',session.user.id).single();
     if(error || !profile) return null;
-    return {demo:false,user:session.user,profile,canInspect:canInspect(profile),canManage:canManage(profile),role:profile.role};
+    return {demo:false,user:session.user,profile,canInspect:canInspect(profile),canTechnician:canTechnician(profile),canManage:canManage(profile),role:profile.role};
   }
 
   window.craneRequireRole = async function(role){
     if(!window.craneAuthReady){
-      return {demo:true,role,user:null,profile:{role,full_name:'Demo User',active:true,can_inspect:true,can_manage:role==='executive'}};
+      return {demo:true,role,user:null,profile:{role,full_name:'Demo User',active:true,can_inspect:true,can_technician:role==='technician',can_manage:role==='executive'}};
     }
     const ctx = await getContext();
     if(!ctx){ location.href='./index.html'; return null; }
-    const allowed = role === 'operator' ? ctx.canInspect : ctx.canManage;
+    const allowed = role === 'operator' ? ctx.canInspect : role === 'technician' ? ctx.canTechnician : ctx.canManage;
     if(!allowed){ alert('This account does not have access to this area.'); location.href='./index.html'; return null; }
     return ctx;
   };
