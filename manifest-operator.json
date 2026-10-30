@@ -1,7 +1,7 @@
 {
-  "name": "Tower Crane Inspection",
-  "short_name": "Crane Inspection",
-  "description": "Daily tower crane inspection log",
+  "name": "Tipton Crane Fleet App",
+  "short_name": "Tipton Crane",
+  "description": "Tipton Crane LLC fleet operations and inspections",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#F3F0E8",
