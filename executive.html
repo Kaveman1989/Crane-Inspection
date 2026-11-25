@@ -29,7 +29,21 @@
 .action-btnrow button.warn{background:#fff;color:var(--amber);border-color:var(--amber)}
 .empty-state{padding:26px 18px;text-align:center;color:var(--muted);font-size:12.5px;border:1.5px dashed var(--line);border-radius:10px;margin-top:9px}
 @media(max-width:700px){.action-stats{grid-template-columns:1fr 1fr}}
-.cleanup-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-top:10px}.cleanup-stat{border:1px solid var(--line);border-radius:9px;padding:9px;background:#fff}.cleanup-stat b{display:block;font-size:18px}.modal-actions{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}.modal-actions button{padding:8px 11px;border:1px solid var(--line);border-radius:8px;background:#fff;font-weight:800;cursor:pointer}.modal-actions .danger{color:#fff}.retired{opacity:.65}.merge-note{padding:10px;border:1px dashed var(--line);border-radius:9px;background:#faf8f2;font-size:11px;margin-top:10px}@media(max-width:700px){.cleanup-grid{grid-template-columns:1fr 1fr}}@media(max-width:500px){.cleanup-grid{grid-template-columns:1fr}}</style></head><body><main class="wrap"><header class="top"><div><h1>Management / Executive</h1><p>Fleet oversight • assignments • inspection review • reports • photos • corrective actions</p></div><div><span id="who"></span><button id="operatorMode">Open Inspection Workspace</button><button id="signout">Sign out</button></div></header>
+.cleanup-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-top:10px}.cleanup-stat{border:1px solid var(--line);border-radius:9px;padding:9px;background:#fff}.cleanup-stat b{display:block;font-size:18px}.modal-actions{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}.modal-actions button{padding:8px 11px;border:1px solid var(--line);border-radius:8px;background:#fff;font-weight:800;cursor:pointer}.modal-actions .danger{color:#fff}.retired{opacity:.65}.merge-note{padding:10px;border:1px dashed var(--line);border-radius:9px;background:#faf8f2;font-size:11px;margin-top:10px}@media(max-width:700px){.cleanup-grid{grid-template-columns:1fr 1fr}}@media(max-width:500px){.cleanup-grid{grid-template-columns:1fr}}
+#executiveReport{box-sizing:border-box;width:min(1100px,100%);max-width:100%;max-height:100%;max-height:100dvh;overflow:auto;border:1px solid #ccc;border-radius:10px;padding:0;color:#23262b;background:white}
+#executiveReport::backdrop{background:#0009}
+.report-controls{position:sticky;top:0;display:flex;justify-content:flex-end;gap:8px;padding:12px;background:white;border-bottom:1px solid #ddd}
+.report-content{padding:16px}
+.report-summary{display:flex;flex-wrap:wrap;gap:8px 20px}
+.report-table{overflow:auto}
+@media print{
+  body:has(#executiveReport[open]) > :not(#executiveReport){display:none!important}
+  #executiveReport[open]{position:static;width:100%;max-height:none;overflow:visible;margin:0;border:0}
+  #executiveReport::backdrop{display:none}
+  #executiveReport .report-controls,#executiveReport .report-review{display:none}
+  #executiveReport .report-table{overflow:visible}
+}
+</style></head><body><main class="wrap"><header class="top"><div><h1>Management / Executive</h1><p>Fleet oversight • assignments • inspection review • reports • photos • corrective actions</p></div><div><span id="who"></span><button id="operatorMode">Open Inspection Workspace</button><button id="signout">Sign out</button></div></header>
 <div class="toolbar"><button class="primary" id="allBtn">All History</button><button id="30Btn">30 Days</button><button id="90Btn">90 Days</button><button id="ytdBtn">YTD</button><button id="reportBtn">Executive Report</button><button id="csvBtn">Export CSV</button></div>
 <section class="grid" id="stats"></section>
 <section class="layout"><div>
@@ -48,12 +62,51 @@
 </div></section></main>
 <div id="modal" class="modal"><div class="modalbox"><div class="modalhead"><h2 id="modalTitle">Inspection review</h2><button id="closeModal">Close</button></div><div id="modalBody"></div></div></div>
 <datalist id="profileNames"></datalist>
+<dialog id="executiveReport" aria-labelledby="reportTitle">
+  <div class="report-controls">
+    <button type="button" id="printReport">Print / Save PDF</button>
+    <button type="button" id="closeReport" autofocus>Close report</button>
+  </div>
+  <div class="report-content">
+    <h2 id="reportTitle">Tipton Crane Executive Report</h2>
+    <div id="reportBody"></div>
+  </div>
+</dialog>
 <script src="./config.js"></script><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><script src="./auth.js"></script><script src="./executive-tabs.js"></script><script>
 const ITEMS=["Electrical power cords, main feed, junction box/splice","Ground fault circuit interrupter (GFCI)","ON/OFF switch (main disconnect)","Crane base inspection","Inspect walkways, handrails, guards, and ladders","Inspect structure, pins, keepers, and mast bolts","Ensure all doors, panels, and covers are in place and weather-tight","Operator's controls are functioning adequately","Load moment hoist limit","Load moment trolley limit","Maximum load (line pull)","Trolley out","Trolley in","Hoist up deceleration limit","Hoist upper limit","Hoist down limit or slack line","Ensure all audio/visual indicators are functioning properly","Anemometer","Hoist brake is functioning","Slewing brake is functioning","Trolley brake (when applicable)","Visually inspect load block and hook","Travel brake (to rail)","Rail travel forward and reverse","Inspect tracks for loose connections, proper drainage, subsidence and bogie wear on travelling cranes, rail clamps, and end stops","Base level (as per manufacturer's specifications)","Foundation condition (as per engineer's specifications)","Housekeeping: concrete debris, rebar dowels, signage, lights, access/egress, etc.","Supervisor notified of defects or faults"];
 let ctx=null,cranes=[],operators=[],profiles=[],assignments=[],inspections=[],photos=[],managementActions=[],partsRequests=[],partsRequestItems=[],partsRequestHistory=[],actionStatusFilter='active',selectedAction=null,range='ALL',selectedInspection=null,recordLimit=15,craneHistoryLimit=20;const $=id=>document.getElementById(id);const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function key(d){return d.toISOString().slice(0,10)}function rangeDates(){const e=new Date(),end=key(e);if(range==='30'){e.setDate(e.getDate()-29);return[key(e),end]}if(range==='90'){e.setDate(e.getDate()-89);return[key(e),end]}if(range==='YTD')return[`${new Date().getFullYear()}-01-01`,end];return['0000-01-01','9999-12-31']}function inRange(d){const r=rangeDates();return d>=r[0]&&d<=r[1]}
 async function init(){ctx=await window.craneRequireRole('executive');if(!ctx)return;$('who').textContent=ctx.profile.full_name||ctx.user?.email||'Executive';$('partsRequestFilter').addEventListener('change',renderPartsRequests);$('refreshPartsRequests').onclick=loadPartsRequests;if(!window.craneAuthReady){seedDemo();partsRequestHistory=[{id:'demo-history-1',request_id:'demo-parts-1',crane_id:'demo-crane-1',actor_id:'demo-op',event_type:'created',old_status:null,new_status:'submitted',notes:'Demo request created.',created_at:partsRequests[0].created_at}];render();renderPartsRequests();return}await loadData();await loadPartsRequests();render();}
-async function loadData(){const s=window.craneSupabase;let r=await s.from('cranes').select('*').order('project');if(r.error)throw r.error;cranes=r.data||[];r=await s.from('profiles').select('id,full_name,role,active').eq('active',true).order('full_name');if(r.error)throw r.error;profiles=r.data||[];operators=profiles.filter(x=>x.role==='operator');r=await s.from('crane_assignments').select('id,crane_id,operator_id,starts_on,ends_on,active');if(r.error)throw r.error;assignments=r.data||[];r=await s.from('inspections').select('id,crane_id,operator_id,inspection_date,data,status,updated_at').order('inspection_date',{ascending:false});if(r.error)throw r.error;inspections=r.data||[];r=await s.from('inspection_photos').select('id,inspection_id,crane_id,operator_id,inspection_date,storage_path,file_name,mime_type,created_at').order('created_at',{ascending:false});photos=r.error?[]:(r.data||[]);r=await s.from('management_actions').select('*').order('inspection_date',{ascending:false});managementActions=r.error?[]:(r.data||[]);populateSelectors();}
+async function loadPages(query){
+  const pageSize=500;
+  const rows=[];
+  for(let offset=0;;offset+=pageSize){
+    const {data,error}=await query().range(offset,offset+pageSize-1);
+    if(error)throw error;
+    rows.push(...data);
+    if(data.length<pageSize)return rows;
+  }
+}
+async function loadData(){
+  const client=window.craneSupabase;
+  const [fleet,people,duties,records,media,actions]=await Promise.all([
+    loadPages(()=>client.from('cranes').select('*').order('project').order('id')),
+    loadPages(()=>client.from('profiles').select('id,full_name,role,active').order('full_name').order('id')),
+    loadPages(()=>client.from('crane_assignments').select('id,crane_id,operator_id,starts_on,ends_on,active').order('id')),
+    loadPages(()=>client.from('inspections').select('id,crane_id,operator_id,inspection_date,data,status,updated_at').order('inspection_date',{ascending:false}).order('id')),
+    loadPages(()=>client.from('inspection_photos').select('id,inspection_id,crane_id,operator_id,inspection_date,storage_path,file_name,mime_type,created_at').order('created_at',{ascending:false}).order('id')).catch(()=>[]),
+    loadPages(()=>client.from('management_actions').select('*').order('inspection_date',{ascending:false}).order('id')).catch(error=>{console.error('Unable to load follow-ups',error);return null;})
+  ]);
+  cranes=fleet;
+  profiles=people;
+  operators=people.filter(person=>person.active&&person.role==='operator');
+  assignments=duties;
+  inspections=records;
+  photos=media;
+  managementActions=actions||[];
+  reportActionsAvailable=actions!==null;
+  populateSelectors();
+}
 async function loadPartsRequests(){
   $('partsRequestStatus').textContent='Loading parts requests…';
   if(!window.craneAuthReady){partsRequests=[];partsRequestItems=[];partsRequestHistory=[];renderPartsRequests();$('partsRequestStatus').textContent='Demo mode: parts requests are only stored in this browser session.';return}
@@ -310,7 +363,63 @@ $('addCraneBtn').onclick=async()=>{const row={owner:$('owner').value,lessee:$('l
 ['allBtn','30Btn','90Btn','ytdBtn'].forEach(id=>$(id).onclick=()=>{range={allBtn:'ALL','30Btn':'30','90Btn':'90','ytdBtn':'YTD'}[id];render()});$('operatorMode').onclick=()=>location.href='./operator.html';
 $('createAccountBtn').onclick=async()=>{const name=$('newName').value.trim(),email=$('newEmail').value.trim(),password=$('newPassword').value,role=$('newRole').value,status=$('accountStatus');if(!name||!email||password.length<8){status.textContent='Enter a name, valid email, and password of at least 8 characters.';return}if(!window.craneAuthReady){status.textContent='Demo mode: account creation requires Supabase.';return}status.textContent='Creating account…';try{const session=(await window.craneSupabase.auth.getSession()).data.session;if(!session)throw new Error('Management session expired.');const r=await fetch((window.CRANE_CONFIG.supabaseUrl||'').replace(/\/$/,'')+'/functions/v1/create-account',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+session.access_token},body:JSON.stringify({email,password,full_name:name,role})});const j=await r.json();if(!r.ok)throw new Error(j.error||'Account creation failed');status.textContent='Account created for '+email+' as '+role+'.';$('newName').value='';$('newEmail').value='';$('newPassword').value='';await loadData();render()}catch(e){status.textContent=e.message}};
 function exportCsv(){const rows=inspections.filter(i=>inRange(i.inspection_date));const out=[['Date','Crane','Operator','Approved','Faults','Blank','Status','Remarks','Follow-up','Action Owner','Management Notes']];rows.forEach(i=>{const d=i.data?.day||{},c=d.checks||{},n=Object.keys(c),ok=n.filter(k=>c[k]==='ok').length,f=n.filter(k=>c[k]==='fault').length,cr=cranes.find(x=>x.id===i.crane_id),op=operators.find(x=>x.id===i.operator_id);out.push([i.inspection_date,cr?.project||'',op?.full_name||'',ok,f,ITEMS.length-n.length,i.status,d.remarks||'',d.followUpStatus||'',d.actionOwner||'',d.managementNotes||''])});const csv=out.map(r=>r.map(v=>'"'+String(v??'').replace(/"/g,'""')+'"').join(',')).join('\n'),a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download='crane-inspection-master.csv';a.click()}
-$('csvBtn').onclick=exportCsv;$('reportBtn').onclick=()=>{const s=summarize(),html='<!doctype html><html><head><title>Tipton Crane Executive Report</title><style>body{font-family:Arial;margin:30px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #ccc;padding:7px;text-align:left}.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.stat{border:1px solid #ccc;padding:10px}.stat b{display:block;font-size:22px}@media print{button{display:none}}</style></head><body><button onclick="window.print()">Print / Save PDF</button><h1>Tipton Crane Executive Report</h1><p>Period ${rangeDates().join(" through ")}</p><div class="grid"><div class="stat"><b>${s.days}</b>Inspections</div><div class="stat"><b>${s.completion}%</b>Completion</div><div class="stat"><b>${s.pass}%</b>Pass rate</div><div class="stat"><b>${s.fault}</b>Faults</div><div class="stat"><b>${s.open}</b>Open follow-ups</div><div class="stat"><b>${cranes.length}</b>Cranes</div></div><table><tr><th>Date</th><th>Crane</th><th>Operator</th><th>Approved</th><th>Faults</th><th>Status</th></tr>'+s.rows.map(i=>{const d=i.data?.day||{},c=d.checks||{},cr=cranes.find(x=>x.id===i.crane_id),op=operators.find(x=>x.id===i.operator_id);return `<tr><td>${i.inspection_date}</td><td>${esc(cr?.project||'')}</td><td>${esc(op?.full_name||'')}</td><td>${Object.values(c).filter(v=>v==='ok').length}</td><td>${Object.values(c).filter(v=>v==='fault').length}</td><td>${i.status}</td></tr>`}).join('')+'</table></body></html>';const w=window.open('','_blank');if(w){w.document.write(html);w.document.close()}};
+let reportActionsAvailable=true;
+const reportDialog=$('executiveReport');
+$('closeReport').onclick=()=>reportDialog.close();
+$('printReport').onclick=()=>window.print();
+$('reportBody').onclick=event=>{
+  const button=event.target.closest('button[data-inspection-id]');
+  if(!button)return;
+  reportDialog.close();
+  window.review(button.dataset.inspectionId);
+};
+$('csvBtn').onclick=exportCsv;
+$('reportBtn').onclick=()=>{
+  const summary=summarize();
+  const cranesById=new Map(cranes.map(crane=>[crane.id,crane]));
+  const profilesById=new Map(profiles.map(profile=>[profile.id,profile]));
+  const actionsByInspection=new Map();
+  for(const action of managementActions){
+    if(action.status!=='closed'){
+      actionsByInspection.set(action.inspection_id,(actionsByInspection.get(action.inspection_id)||0)+1);
+    }
+  }
+  const period=range==='ALL'?'All dates':rangeDates().join(' through ');
+  const rows=summary.rows.map(inspection=>{
+    const day=inspection.data?.day||{};
+    const checks=Object.values(day.checks||{});
+    const crane=cranesById.get(inspection.crane_id);
+    const person=profilesById.get(inspection.operator_id);
+    const craneLabel=[crane?.project,crane?.serial].filter(Boolean).join(' · ');
+    const operatorLabel=person?.full_name||day.operatorName||'Operator unavailable';
+    const openActions=reportActionsAvailable?(actionsByInspection.get(inspection.id)||0):'Unavailable';
+    return `<tr>
+      <td>${esc(inspection.inspection_date)}</td>
+      <td>${esc(craneLabel||'Crane unavailable')}</td>
+      <td>${esc(operatorLabel)}</td>
+      <td>${checks.filter(value=>value==='ok').length}</td>
+      <td>${checks.filter(value=>value==='fault').length}</td>
+      <td>${esc(inspection.status)}</td>
+      <td>${openActions}</td>
+      <td class="report-review"><button type="button" data-inspection-id="${esc(inspection.id)}">Review</button></td>
+    </tr>`;
+  });
+  $('reportBody').innerHTML=`
+    <p>Period ${esc(period)}</p>
+    <div class="report-summary">
+      <span><b>${summary.days}</b> inspections</span>
+      <span><b>${summary.completion}%</b> complete</span>
+      <span><b>${summary.pass}%</b> check pass rate</span>
+      <span><b>${summary.fault}</b> faults</span>
+      <span><b>${reportActionsAvailable?summary.open:'Unavailable'}</b> open follow-ups</span>
+      <span><b>${new Set(summary.rows.map(inspection=>inspection.crane_id)).size}</b> cranes inspected</span>
+    </div>
+    ${rows.length?`<div class="report-table"><table>
+      <thead><tr><th>Date</th><th>Crane</th><th>Operator</th><th>Approved</th><th>Faults</th><th>Status</th><th>Open follow-ups</th><th class="report-review">Inspection</th></tr></thead>
+      <tbody>${rows.join('')}</tbody>
+    </table></div>`:'<p>No inspections in this period.</p>'}`;
+  reportDialog.showModal();
+};
 $('deleteTestBtn').onclick=async()=>{if(!selectedInspection){$('cleanupStatus').textContent='Select an inspection first using Review.';return}await deleteInspection(selectedInspection.id)};
 $('signout').onclick=window.craneSignOut;init();
 </script></body></html>
